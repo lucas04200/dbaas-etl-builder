@@ -1,0 +1,13 @@
+---
+# Internal database for the DataForge web application
+# Separate from client-provisioned databases
+
+container_name: dataforge_internal_db
+network_name:   data_forge_network_01
+volume_name:    dataforge_db_data
+postgres_image: postgres:16-alpine      # Alpine: smaller attack surface, ~80 MB
+
+db_name:     dataforge
+db_user:     dataforge
+db_password: "DataForge_Internal_2024!"
+host_port:   5433                       # Different from default 5432 to avoid conflicts

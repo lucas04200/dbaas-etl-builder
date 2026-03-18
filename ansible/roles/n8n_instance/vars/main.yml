@@ -7,3 +7,9 @@ n8n_image: "n8nio/n8n:latest"
 # Noms dynamiques basés sur l'instance_name défini par l'API / Script
 n8n_container_name: "n8n_{{ instance_name }}"
 n8n_volume_name: "n8n_data_{{ instance_name }}"
+
+# Defaults — overridden by API when a PG instance is linked
+target_db_host: ""
+target_db_name: ""
+target_db_user: ""
+target_db_password: ""
