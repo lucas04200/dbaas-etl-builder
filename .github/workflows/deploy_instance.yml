@@ -37,19 +37,20 @@ jobs:
 
       - name: "[Provisioning] 1. Déployer la Database PostgreSQL"
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy_postgres.yml \
+          # Utilisation de 'sg docker' pour forcer la prise en compte des droits sans redémarrer la VM
+          sg docker -c 'ansible-playbook -i ansible/inventory.ini ansible/deploy_postgres.yml \
             -e "instance_name=testenv \
                 db_name=db_testenv \
                 db_user=admin_testenv \
                 db_password=SecureTestPass1! \
-                host_port=5432"
+                host_port=5432"'
 
       - name: "[Provisioning] 2. Déployer l'ETL n8n lié à la base"
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy_n8n.yml \
+          sg docker -c 'ansible-playbook -i ansible/inventory.ini ansible/deploy_n8n.yml \
             -e "instance_name=testenv \
                 host_port=5678 \
                 target_db_host=pg_testenv \
                 target_db_name=db_testenv \
                 target_db_user=admin_testenv \
-                target_db_password=SecureTestPass1!"
+                target_db_password=SecureTestPass1!"'
