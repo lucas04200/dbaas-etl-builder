@@ -1,0 +1,89 @@
+name: Deploy DBaaS/ETL Instance (Self-Hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_type:
+        description: "Type d'instance à déployer"
+        required: true
+        type: choice
+        options:
+          - 'PostgreSQL (DBaaS)'
+          - 'n8n (ETL)'
+      instance_name:
+        description: "Nom unique de l'instance (ex: client_a)"
+        required: true
+        type: string
+      host_port:
+        description: "Port exposé sur la machine distante"
+        required: true
+        type: string
+      db_name:
+        description: "Nom de la base de données"
+        required: true
+        type: string
+      db_user:
+        description: "Nom d'utilisateur"
+        required: true
+        type: string
+      db_password:
+        description: "Mot de passe sécurisé"
+        required: true
+        type: string
+      target_db_host:
+        description: "(Seulement pour n8n) Nom du conteneur DB cible"
+        required: false
+        type: string
+
+jobs:
+  lint:
+    name: Lint Infrastructure Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installer Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y ansible
+          ansible-galaxy collection install community.docker
+
+      - name: Syntax Check des Playbooks
+        run: |
+          ansible-playbook --syntax-check ansible/deploy_postgres.yml
+          ansible-playbook --syntax-check ansible/deploy_n8n.yml
+
+  deploy:
+    name: Déploiement Local sur NAS / VM Privée
+    needs: lint
+    runs-on: self-hosted
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installer la dépendance Docker pour Ansible (Si manquante)
+        run: ansible-galaxy collection install community.docker
+
+      - name: "[Provisioning] Déployer une Database PostgreSQL"
+        if: ${{ github.event.inputs.instance_type == 'PostgreSQL (DBaaS)' }}
+        run: |
+          # Utilise l'inventory local puisque le runner est DÉJÀ sur la machine cible !
+          ansible-playbook -i ansible/inventory.ini ansible/deploy_postgres.yml \
+            -e "instance_name=${{ github.event.inputs.instance_name }} \
+                db_name=${{ github.event.inputs.db_name }} \
+                db_user=${{ github.event.inputs.db_user }} \
+                db_password=${{ github.event.inputs.db_password }} \
+                host_port=${{ github.event.inputs.host_port }}"
+
+      - name: "[Provisioning] Déployer un ETL n8n"
+        if: ${{ github.event.inputs.instance_type == 'n8n (ETL)' }}
+        run: |
+          # Utilise explicitement le fichier d'inventaire pré-existant qui pointe sur localhost
+          ansible-playbook -i ansible/inventory.ini ansible/deploy_n8n.yml \
+            -e "instance_name=${{ github.event.inputs.instance_name }} \
+                host_port=${{ github.event.inputs.host_port }} \
+                target_db_host=${{ github.event.inputs.target_db_host }} \
+                target_db_name=${{ github.event.inputs.db_name }} \
+                target_db_user=${{ github.event.inputs.db_user }} \
+                target_db_password=${{ github.event.inputs.db_password }}"
