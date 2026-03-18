@@ -1,0 +1,17 @@
+---
+- name: "Déploiement d'une instance PostgreSQL (DBaaS)"
+  hosts: docker_hosts
+  # become: true  # <-- Commenté temporairement : WSL/Docker Desktop n'a généralement pas besoin de sudo pour docker
+  
+  # Ces variables peuvent être surchargées via --extra-vars lor de l'appel du playbook
+  # Exemple: ansible-playbook deploy_postgres.yml -e "instance_name=client_a db_name=erp_db db_user=erp_user db_password=foobar"
+  vars:
+    instance_name: "default_instance"
+    db_name: "default_db"
+    db_user: "db_admin"
+    host_port: "5432" # Port d'exposition sur le serveur cible
+    # Il est recommandé de passer le mot de passe depuis un vault ou CLI
+    db_password: "{{ vault_db_password | default('SuperSecret123!') }}"
+
+  roles:
+    - role: postgres_instance

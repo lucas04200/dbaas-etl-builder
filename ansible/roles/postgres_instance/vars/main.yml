@@ -1,0 +1,9 @@
+---
+# Variables internes du rôle
+network_name: "data_forge_network_01"
+
+postgres_image: "postgres:16"
+
+# On utilise instance_name fourni par le playbook pour générer des noms uniques par BDD
+postgres_container_name: "pg_{{ instance_name }}"
+postgres_volume_name: "pg_data_{{ instance_name }}"

@@ -1,0 +1,6 @@
+---
+# Fichier de variables globales pour l'ensemble des groupes
+# Pour la sécurité, ce fichier (ou certaines de ses variables) devrait être chiffré par Ansible Vault en production.
+
+# Secret utilisé pour la BDD et transmis à n8n :
+db_password: "SuperSecretPassword123!" # À modifier (ou chiffrer via ansible-vault : ansible-vault encrypt_string 'SuperSecretPassword123!' --name 'db_password')

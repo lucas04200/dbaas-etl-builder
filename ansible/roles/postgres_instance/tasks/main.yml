@@ -1,0 +1,33 @@
+---
+- name: Création du réseau Docker partagé (pour les futures applications ETL ou requêtes inter-services)
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du Volume Docker spécifique à l'instance ({{ postgres_volume_name }})
+  community.docker.docker_volume:
+    name: "{{ postgres_volume_name }}"
+    state: present
+
+- name: Téléchargement de l'image via Docker CLI (Contourne le bug Python 'Exec format error' sous WSL)
+  ansible.builtin.command: "docker pull {{ postgres_image }}"
+  register: pull_result
+  changed_when: "'Downloaded newer image' in pull_result.stdout"
+
+- name: Déploiement du conteneur PostgreSQL ({{ postgres_container_name }})
+  community.docker.docker_container:
+    name: "{{ postgres_container_name }}"
+    image: "{{ postgres_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ postgres_volume_name }}:/var/lib/postgresql/data"
+    env:
+      POSTGRES_USER: "{{ db_user }}"
+      POSTGRES_PASSWORD: "{{ db_password }}"
+      POSTGRES_DB: "{{ db_name }}"
+    published_ports:
+      - "{{ host_port }}:5432"
+    # La DB est exposée sur le réseau interne ET sur le port host_port (ex: 5432) de la machine host
