@@ -9,11 +9,6 @@
     name: "{{ postgres_volume_name }}"
     state: present
 
-- name: Téléchargement de l'image via Docker CLI (Contourne le bug Python 'Exec format error' sous WSL)
-  ansible.builtin.command: "docker pull {{ postgres_image }}"
-  register: pull_result
-  changed_when: "'Downloaded newer image' in pull_result.stdout"
-
 - name: Déploiement du conteneur PostgreSQL ({{ postgres_container_name }})
   community.docker.docker_container:
     name: "{{ postgres_container_name }}"
@@ -30,4 +25,7 @@
       POSTGRES_DB: "{{ db_name }}"
     published_ports:
       - "{{ host_port }}:5432"
+  # On masque la config Docker par défaut pour ignorer le 'docker-credential-desktop.exe' sous WSL qui plante (Exec format error)
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
     # La DB est exposée sur le réseau interne ET sur le port host_port (ex: 5432) de la machine host
