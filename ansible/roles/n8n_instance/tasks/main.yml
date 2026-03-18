@@ -1,0 +1,38 @@
+---
+- name: S'assurer que le réseau Docker partagé existe pour la comm DB-ETL
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du Volume Docker spécifique à l'instance n8n ({{ n8n_volume_name }})
+  community.docker.docker_volume:
+    name: "{{ n8n_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur n8n ({{ n8n_container_name }})
+  community.docker.docker_container:
+    name: "{{ n8n_container_name }}"
+    image: "{{ n8n_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ n8n_volume_name }}:/home/node/.n8n"
+    published_ports:
+      - "{{ host_port }}:5678"
+    env:
+      # Configurations natives pour brancher n8n sur sa DBaaS PostgreSQL
+      DB_TYPE: "postgresdb"
+      DB_POSTGRESDB_HOST: "{{ target_db_host }}"
+      DB_POSTGRESDB_PORT: "5432" # Le port interne du réseau Docker
+      DB_POSTGRESDB_DATABASE: "{{ target_db_name }}"
+      DB_POSTGRESDB_USER: "{{ target_db_user }}"
+      DB_POSTGRESDB_PASSWORD: "{{ target_db_password }}"
+
+      # Optimisations de base de n8n
+      N8N_ENFORCEMENT_SECURITY: "false"
+      WEBHOOK_URL: "http://localhost:{{ host_port }}/"
+  # L'astuce pour éviter l'erreur de credentials pull Windows sous WSL
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

@@ -1,0 +1,9 @@
+---
+# Variables internes du rôle n8n
+network_name: "data_forge_network_01"
+
+n8n_image: "n8nio/n8n:latest"
+
+# Noms dynamiques basés sur l'instance_name défini par l'API / Script
+n8n_container_name: "n8n_{{ instance_name }}"
+n8n_volume_name: "n8n_data_{{ instance_name }}"
