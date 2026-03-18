@@ -32,6 +32,7 @@
 
       # Optimisations de base de n8n
       N8N_ENFORCEMENT_SECURITY: "false"
+      N8N_SECURE_COOKIE: "false"
       WEBHOOK_URL: "http://localhost:{{ host_port }}/"
   # L'astuce pour éviter l'erreur de credentials pull Windows sous WSL
   environment:
