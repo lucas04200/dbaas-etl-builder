@@ -146,6 +146,59 @@ def init_db() -> str:
                     permission    VARCHAR(16) NOT NULL DEFAULT 'read',
                     UNIQUE(group_id, instance_type, instance_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS metabase_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     REFERENCES postgres_instances(id) ON DELETE SET NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS redis_instances (
+                    id         SERIAL PRIMARY KEY,
+                    name       VARCHAR(64) UNIQUE NOT NULL,
+                    host_port  INTEGER     NOT NULL,
+                    password   TEXT        DEFAULT '',
+                    status     VARCHAR(16) DEFAULT 'provisioning',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    created_by INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS postgrest_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+                    db_schema    VARCHAR(64) DEFAULT 'public',
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS mage_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     REFERENCES postgres_instances(id) ON DELETE SET NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS minio_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    console_port INTEGER     NOT NULL,
+                    root_user    VARCHAR(64) NOT NULL,
+                    root_password TEXT       NOT NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
             """)
 
             cur.execute("SELECT value FROM app_config WHERE key = 'secret_key'")
@@ -203,11 +256,15 @@ def _next_port(conn, base: int) -> int:
     with _cursor(conn) as cur:
         cur.execute("""
             SELECT host_port FROM postgres_instances
-            UNION ALL
-            SELECT host_port FROM n8n_instances
+            UNION ALL SELECT host_port FROM n8n_instances
+            UNION ALL SELECT host_port FROM metabase_instances
+            UNION ALL SELECT host_port FROM redis_instances
+            UNION ALL SELECT host_port FROM postgrest_instances
+            UNION ALL SELECT host_port FROM mage_instances
+            UNION ALL SELECT host_port FROM minio_instances
+            UNION ALL SELECT console_port AS host_port FROM minio_instances
         """)
         used = {r["host_port"] for r in cur.fetchall()}
-    # Also avoid the internal DataForge DB port
     used.add(DB_PORT)
     p = base
     while p in used:
@@ -984,6 +1041,441 @@ def remove_permission(group_id: int, perm_id: int,
             "DELETE FROM instance_permissions WHERE id = %s AND group_id = %s",
             (perm_id, group_id),
         )
+    return {"ok": True}
+
+
+# ── Metabase provisioning ──────────────────────────────────────────────────────
+
+async def _provision_metabase(instance_id: int, name: str, port: int,
+                               linked_pg: Optional[dict]):
+    extra: dict = {"instance_name": name, "host_port": port}
+    if linked_pg:
+        extra.update({
+            "linked_pg_host":     f"pg_{linked_pg['name']}",
+            "linked_pg_dbname":   linked_pg["db_name"],
+            "linked_pg_user":     linked_pg["db_user"],
+            "linked_pg_password": linked_pg["db_password"],
+        })
+    code, _ = await _run_ansible("deploy_metabase.yml", extra)
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE metabase_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_redis(instance_id: int, name: str, port: int, password: str):
+    code, _ = await _run_ansible("deploy_redis.yml", {
+        "instance_name": name, "host_port": port, "redis_password": password,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE redis_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_postgrest(instance_id: int, name: str, port: int, linked_pg: dict):
+    code, _ = await _run_ansible("deploy_postgrest.yml", {
+        "instance_name": name,
+        "host_port":     port,
+        "pg_host":       f"pg_{linked_pg['name']}",
+        "pg_dbname":     linked_pg["db_name"],
+        "pg_user":       linked_pg["db_user"],
+        "pg_password":   linked_pg["db_password"],
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE postgrest_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_mage(instance_id: int, name: str, port: int,
+                           linked_pg: Optional[dict]):
+    extra: dict = {"instance_name": name, "host_port": port}
+    if linked_pg:
+        extra.update({
+            "linked_pg_host":     f"pg_{linked_pg['name']}",
+            "linked_pg_dbname":   linked_pg["db_name"],
+            "linked_pg_user":     linked_pg["db_user"],
+            "linked_pg_password": linked_pg["db_password"],
+        })
+    code, _ = await _run_ansible("deploy_mage.yml", extra)
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE mage_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_minio(instance_id: int, name: str, port: int, console_port: int,
+                            root_user: str, root_password: str):
+    code, _ = await _run_ansible("deploy_minio.yml", {
+        "instance_name":      name,
+        "host_port":          port,
+        "console_port":       console_port,
+        "minio_root_user":    root_user,
+        "minio_root_password": root_password,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE minio_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+# ── Metabase Instances API ─────────────────────────────────────────────────────
+
+class CreateMetabaseRequest(BaseModel):
+    name: str
+    linked_pg_id: Optional[int] = None
+
+
+@app.get("/api/metabase")
+def list_metabase(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("""
+            SELECT m.id, m.name, m.host_port, m.status, m.created_at,
+                   p.name AS linked_pg_name
+            FROM   metabase_instances m
+            LEFT JOIN postgres_instances p ON p.id = m.linked_pg_id
+            ORDER  BY m.created_at DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/metabase/{instance_id}")
+def get_metabase(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM metabase_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/metabase", status_code=201)
+def create_metabase(body: CreateMetabaseRequest, bg: BackgroundTasks,
+                    user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    linked_pg = None
+    if body.linked_pg_id:
+        with _cursor(db) as cur:
+            cur.execute("SELECT * FROM postgres_instances WHERE id = %s", (body.linked_pg_id,))
+            row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Instance PostgreSQL introuvable")
+        linked_pg = dict(row)
+    port = _next_port(db, 3000)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO metabase_instances (name, host_port, linked_pg_id, created_by) VALUES (%s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.linked_pg_id, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_metabase, instance_id, body.name, port, linked_pg)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/metabase/{instance_id}")
+def delete_metabase(instance_id: int, bg: BackgroundTasks,
+                    _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM metabase_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM metabase_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"metabase_{row['name']}")
+    return {"ok": True}
+
+
+# ── Redis Instances API ────────────────────────────────────────────────────────
+
+class CreateRedisRequest(BaseModel):
+    name: str
+    password: str = ""
+
+
+@app.get("/api/redis")
+def list_redis(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM redis_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/redis/{instance_id}")
+def get_redis(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM redis_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/redis", status_code=201)
+def create_redis(body: CreateRedisRequest, bg: BackgroundTasks,
+                 user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    port = _next_port(db, 6379)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO redis_instances (name, host_port, password, created_by) VALUES (%s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.password, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_redis, instance_id, body.name, port, body.password)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/redis/{instance_id}")
+def delete_redis(instance_id: int, bg: BackgroundTasks,
+                 _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM redis_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM redis_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"redis_{row['name']}")
+    return {"ok": True}
+
+
+# ── PostgREST Instances API ────────────────────────────────────────────────────
+
+class CreatePostgRESTRequest(BaseModel):
+    name: str
+    linked_pg_id: int
+    db_schema: str = "public"
+
+
+@app.get("/api/postgrest")
+def list_postgrest(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("""
+            SELECT r.id, r.name, r.host_port, r.db_schema, r.status, r.created_at,
+                   p.name AS linked_pg_name
+            FROM   postgrest_instances r
+            JOIN   postgres_instances p ON p.id = r.linked_pg_id
+            ORDER  BY r.created_at DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/postgrest/{instance_id}")
+def get_postgrest(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM postgrest_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/postgrest", status_code=201)
+def create_postgrest(body: CreatePostgRESTRequest, bg: BackgroundTasks,
+                     user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    with _cursor(db) as cur:
+        cur.execute("SELECT * FROM postgres_instances WHERE id = %s", (body.linked_pg_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance PostgreSQL introuvable")
+    linked_pg = dict(row)
+    port = _next_port(db, 3100)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO postgrest_instances (name, host_port, linked_pg_id, db_schema, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.linked_pg_id, body.db_schema, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_postgrest, instance_id, body.name, port, linked_pg)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/postgrest/{instance_id}")
+def delete_postgrest(instance_id: int, bg: BackgroundTasks,
+                     _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM postgrest_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM postgrest_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"postgrest_{row['name']}")
+    return {"ok": True}
+
+
+# ── Mage Instances API ─────────────────────────────────────────────────────────
+
+class CreateMageRequest(BaseModel):
+    name: str
+    linked_pg_id: Optional[int] = None
+
+
+@app.get("/api/mage")
+def list_mage(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("""
+            SELECT m.id, m.name, m.host_port, m.status, m.created_at,
+                   p.name AS linked_pg_name
+            FROM   mage_instances m
+            LEFT JOIN postgres_instances p ON p.id = m.linked_pg_id
+            ORDER  BY m.created_at DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/mage/{instance_id}")
+def get_mage(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM mage_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/mage", status_code=201)
+def create_mage(body: CreateMageRequest, bg: BackgroundTasks,
+                user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    linked_pg = None
+    if body.linked_pg_id:
+        with _cursor(db) as cur:
+            cur.execute("SELECT * FROM postgres_instances WHERE id = %s", (body.linked_pg_id,))
+            row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Instance PostgreSQL introuvable")
+        linked_pg = dict(row)
+    port = _next_port(db, 6789)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO mage_instances (name, host_port, linked_pg_id, created_by) VALUES (%s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.linked_pg_id, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_mage, instance_id, body.name, port, linked_pg)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/mage/{instance_id}")
+def delete_mage(instance_id: int, bg: BackgroundTasks,
+                _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM mage_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM mage_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"mage_{row['name']}")
+    return {"ok": True}
+
+
+# ── MinIO Instances API ────────────────────────────────────────────────────────
+
+class CreateMinIORequest(BaseModel):
+    name: str
+    root_user: str = "minioadmin"
+    root_password: str
+
+
+@app.get("/api/minio")
+def list_minio(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute(
+            "SELECT id, name, host_port, console_port, root_user, status, created_at "
+            "FROM minio_instances ORDER BY created_at DESC"
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/minio/{instance_id}")
+def get_minio(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute(
+            "SELECT id, name, host_port, console_port, root_user, status, created_at "
+            "FROM minio_instances WHERE id = %s", (instance_id,)
+        )
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/minio", status_code=201)
+def create_minio(body: CreateMinIORequest, bg: BackgroundTasks,
+                 user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    if len(body.root_password) < 8:
+        raise HTTPException(400, "Mot de passe MinIO trop court (8 car. min)")
+    port = _next_port(db, 9000)
+    console_port = _next_port(db, port + 1)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                """INSERT INTO minio_instances
+                   (name, host_port, console_port, root_user, root_password, created_by)
+                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                (body.name, port, console_port, body.root_user, body.root_password, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_minio, instance_id, body.name, port, console_port,
+                body.root_user, body.root_password)
+    return {"id": instance_id, "port": port, "console_port": console_port, "status": "provisioning"}
+
+
+@app.delete("/api/minio/{instance_id}")
+def delete_minio(instance_id: int, bg: BackgroundTasks,
+                 _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM minio_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM minio_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"minio_{row['name']}")
     return {"ok": True}
 
 

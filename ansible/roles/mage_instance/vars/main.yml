@@ -1,0 +1,9 @@
+---
+network_name: "data_forge_network_01"
+mage_image: "mageai/mageai:latest"
+mage_container_name: "mage_{{ instance_name }}"
+mage_volume_name: "mage_data_{{ instance_name }}"
+linked_pg_host: ""
+linked_pg_dbname: ""
+linked_pg_user: ""
+linked_pg_password: ""

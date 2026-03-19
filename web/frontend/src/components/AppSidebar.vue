@@ -45,12 +45,53 @@
         </svg>
         n8n
       </router-link>
+      <router-link to="/metabase" class="nav-item" :class="{ active: route.path === '/metabase' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <rect x="1.5" y="9" width="3" height="5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="6" y="5.5" width="3" height="8.5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="10.5" y="2" width="3" height="12" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        Metabase
+      </router-link>
+      <router-link to="/postgrest" class="nav-item" :class="{ active: route.path === '/postgrest' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M2 5h11M2 10h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M5 2l-3 5.5 3 5.5M10 2l3 5.5-3 5.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        PostgREST
+      </router-link>
+      <router-link to="/mage" class="nav-item" :class="{ active: route.path === '/mage' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M7.5 1.5L9.5 6H13L9.8 8.8 11 13 7.5 10.5 4 13l1.2-4.2L2 6h3.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+        </svg>
+        Mage.ai
+      </router-link>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Infrastructure</div>
+      <router-link to="/redis" class="nav-item" :class="{ active: route.path === '/redis' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <ellipse cx="7.5" cy="4" rx="5" ry="2" stroke="currentColor" stroke-width="1.3"/>
+          <ellipse cx="7.5" cy="7.5" rx="5" ry="2" stroke="currentColor" stroke-width="1.3"/>
+          <ellipse cx="7.5" cy="11" rx="5" ry="2" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2.5 4v7M12.5 4v7" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        Redis
+      </router-link>
+      <router-link to="/minio" class="nav-item" :class="{ active: route.path === '/minio' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M2 11V6l5.5-4L13 6v5a1 1 0 01-1 1H3a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M5.5 12V8.5h4V12" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        MinIO
+      </router-link>
     </div>
 
     <div class="sidebar-spacer"></div>
 
     <div class="sidebar-bottom">
-      <router-link to="/security" class="nav-item" :class="{ active: route.path === '/security' }">
+      <router-link v-if="isAdmin" to="/security" class="nav-item" :class="{ active: route.path === '/security' }">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
           <path d="M7.5 1.5 2.5 3.75V7c0 3 2.2 5.8 5 6.5 2.8-.7 5-3.5 5-6.5V3.75L7.5 1.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
           <path d="M5.25 7.5 6.75 9 10 5.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -70,6 +111,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiLogout } from '../lib/api.js'
 import { useAuthStore } from '../stores/auth.js'
@@ -77,6 +119,7 @@ import { useAuthStore } from '../stores/auth.js'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const isAdmin = computed(() => authStore.currentUser?.role === 'admin')
 
 async function doLogout() {
   await apiLogout()

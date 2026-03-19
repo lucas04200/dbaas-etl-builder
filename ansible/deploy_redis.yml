@@ -1,0 +1,11 @@
+---
+- name: "Déploiement d'une instance Redis"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_redis"
+    host_port: "6379"
+    redis_password: ""
+
+  roles:
+    - role: redis_instance

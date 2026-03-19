@@ -1,0 +1,43 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Metabase
+  community.docker.docker_volume:
+    name: "{{ metabase_volume_name }}"
+    state: present
+
+- name: Configuration de base Metabase
+  set_fact:
+    metabase_env:
+      MB_JETTY_PORT: "3000"
+
+- name: Ajout de la configuration PostgreSQL si une DB est liée
+  set_fact:
+    metabase_env: "{{ metabase_env | combine({
+      'MB_DB_TYPE': 'postgres',
+      'MB_DB_HOST': linked_pg_host,
+      'MB_DB_PORT': '5432',
+      'MB_DB_DBNAME': linked_pg_dbname,
+      'MB_DB_USER': linked_pg_user,
+      'MB_DB_PASS': linked_pg_password
+    }) }}"
+  when: linked_pg_host is defined and linked_pg_host | length > 0
+
+- name: Déploiement du conteneur Metabase
+  community.docker.docker_container:
+    name: "{{ metabase_container_name }}"
+    image: "{{ metabase_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ metabase_volume_name }}:/metabase-data"
+    published_ports:
+      - "{{ host_port }}:3000"
+    env: "{{ metabase_env }}"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

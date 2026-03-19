@@ -1,0 +1,39 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Mage
+  community.docker.docker_volume:
+    name: "{{ mage_volume_name }}"
+    state: present
+
+- name: Configuration de base Mage
+  set_fact:
+    mage_env:
+      MAGE_PROJECTS_FOLDER: "/home/src"
+
+- name: Ajout de la configuration PostgreSQL si une DB est liée
+  set_fact:
+    mage_env: "{{ mage_env | combine({
+      'MAGE_DATABASE_CONNECTION_URL': 'postgresql+psycopg2://' + linked_pg_user + ':' + linked_pg_password + '@' + linked_pg_host + ':5432/' + linked_pg_dbname
+    }) }}"
+  when: linked_pg_host is defined and linked_pg_host | length > 0
+
+- name: Déploiement du conteneur Mage
+  community.docker.docker_container:
+    name: "{{ mage_container_name }}"
+    image: "{{ mage_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ mage_volume_name }}:/home/src"
+    published_ports:
+      - "{{ host_port }}:6789"
+    env: "{{ mage_env }}"
+    command: "mage start {{ instance_name }}"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

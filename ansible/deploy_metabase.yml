@@ -1,0 +1,14 @@
+---
+- name: "Déploiement d'une instance Metabase (BI)"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_metabase"
+    host_port: "3000"
+    linked_pg_host: ""
+    linked_pg_dbname: ""
+    linked_pg_user: ""
+    linked_pg_password: ""
+
+  roles:
+    - role: metabase_instance

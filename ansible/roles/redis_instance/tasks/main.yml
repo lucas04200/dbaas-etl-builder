@@ -1,0 +1,43 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Redis
+  community.docker.docker_volume:
+    name: "{{ redis_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur Redis (sans mot de passe)
+  community.docker.docker_container:
+    name: "{{ redis_container_name }}"
+    image: "{{ redis_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ redis_volume_name }}:/data"
+    published_ports:
+      - "{{ host_port }}:6379"
+  when: redis_password == ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
+
+- name: Déploiement du conteneur Redis (avec mot de passe)
+  community.docker.docker_container:
+    name: "{{ redis_container_name }}"
+    image: "{{ redis_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ redis_volume_name }}:/data"
+    published_ports:
+      - "{{ host_port }}:6379"
+    command: "redis-server --requirepass {{ redis_password }}"
+  when: redis_password != ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

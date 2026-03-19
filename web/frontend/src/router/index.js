@@ -29,8 +29,29 @@ const routes = [
         component: () => import('../views/N8nView.vue'),
       },
       {
+        path: 'metabase',
+        component: () => import('../views/MetabaseView.vue'),
+      },
+      {
+        path: 'redis',
+        component: () => import('../views/RedisView.vue'),
+      },
+      {
+        path: 'postgrest',
+        component: () => import('../views/PostgRESTView.vue'),
+      },
+      {
+        path: 'mage',
+        component: () => import('../views/MageView.vue'),
+      },
+      {
+        path: 'minio',
+        component: () => import('../views/MinIOView.vue'),
+      },
+      {
         path: 'security',
         component: () => import('../views/SecurityView.vue'),
+        meta: { requiresAdmin: true },
       },
     ],
   },
@@ -57,6 +78,10 @@ router.beforeEach(async (to) => {
     } catch {
       return '/login'
     }
+  }
+
+  if (to.meta.requiresAdmin && authStore.currentUser?.role !== 'admin') {
+    return '/databases'
   }
 
   return true

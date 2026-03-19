@@ -1,0 +1,9 @@
+---
+network_name: "data_forge_network_01"
+postgrest_image: "postgrest/postgrest:latest"
+postgrest_container_name: "postgrest_{{ instance_name }}"
+pg_host: ""
+pg_dbname: ""
+pg_user: ""
+pg_password: ""
+db_schema: "public"

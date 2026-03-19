@@ -1,0 +1,8 @@
+---
+network_name: "data_forge_network_01"
+minio_image: "minio/minio:latest"
+minio_container_name: "minio_{{ instance_name }}"
+minio_volume_name: "minio_data_{{ instance_name }}"
+minio_root_user: "minioadmin"
+minio_root_password: "minioadmin"
+console_port: "9001"

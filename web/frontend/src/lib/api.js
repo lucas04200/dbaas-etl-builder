@@ -108,6 +108,76 @@ export async function apiDeleteUser(id) {
   return fetchWithAuth(`/api/users/${id}`, { method: 'DELETE' })
 }
 
+// Metabase
+export async function apiGetMetabase() {
+  return fetchWithAuth('/api/metabase')
+}
+export async function apiGetMetabaseInstance(id) {
+  return fetchWithAuth(`/api/metabase/${id}`)
+}
+export async function apiCreateMetabase(body) {
+  return fetchWithAuth('/api/metabase', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteMetabase(id) {
+  return fetchWithAuth(`/api/metabase/${id}`, { method: 'DELETE' })
+}
+
+// Redis
+export async function apiGetRedis() {
+  return fetchWithAuth('/api/redis')
+}
+export async function apiGetRedisInstance(id) {
+  return fetchWithAuth(`/api/redis/${id}`)
+}
+export async function apiCreateRedis(body) {
+  return fetchWithAuth('/api/redis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteRedis(id) {
+  return fetchWithAuth(`/api/redis/${id}`, { method: 'DELETE' })
+}
+
+// PostgREST
+export async function apiGetPostgREST() {
+  return fetchWithAuth('/api/postgrest')
+}
+export async function apiGetPostgRESTInstance(id) {
+  return fetchWithAuth(`/api/postgrest/${id}`)
+}
+export async function apiCreatePostgREST(body) {
+  return fetchWithAuth('/api/postgrest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeletePostgREST(id) {
+  return fetchWithAuth(`/api/postgrest/${id}`, { method: 'DELETE' })
+}
+
+// Mage
+export async function apiGetMage() {
+  return fetchWithAuth('/api/mage')
+}
+export async function apiGetMageInstance(id) {
+  return fetchWithAuth(`/api/mage/${id}`)
+}
+export async function apiCreateMage(body) {
+  return fetchWithAuth('/api/mage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteMage(id) {
+  return fetchWithAuth(`/api/mage/${id}`, { method: 'DELETE' })
+}
+
+// MinIO
+export async function apiGetMinIO() {
+  return fetchWithAuth('/api/minio')
+}
+export async function apiGetMinIOInstance(id) {
+  return fetchWithAuth(`/api/minio/${id}`)
+}
+export async function apiCreateMinIO(body) {
+  return fetchWithAuth('/api/minio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteMinIO(id) {
+  return fetchWithAuth(`/api/minio/${id}`, { method: 'DELETE' })
+}
+
 // Groups
 export async function apiGetGroups() {
   return fetchWithAuth('/api/groups')

@@ -1,0 +1,13 @@
+---
+- name: "Déploiement d'une instance MinIO (stockage objet S3)"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_minio"
+    host_port: "9000"
+    console_port: "9001"
+    minio_root_user: "minioadmin"
+    minio_root_password: "MinioSecret123!"
+
+  roles:
+    - role: minio_instance

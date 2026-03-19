@@ -1,0 +1,14 @@
+---
+- name: "Déploiement d'une instance Mage.ai (ETL)"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_mage"
+    host_port: "6789"
+    linked_pg_host: ""
+    linked_pg_dbname: ""
+    linked_pg_user: ""
+    linked_pg_password: ""
+
+  roles:
+    - role: mage_instance

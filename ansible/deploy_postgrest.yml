@@ -1,0 +1,15 @@
+---
+- name: "Déploiement d'une instance PostgREST (API REST sur PostgreSQL)"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_postgrest"
+    host_port: "3100"
+    pg_host: ""
+    pg_dbname: ""
+    pg_user: ""
+    pg_password: ""
+    db_schema: "public"
+
+  roles:
+    - role: postgrest_instance
