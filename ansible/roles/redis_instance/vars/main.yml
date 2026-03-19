@@ -1,6 +1,6 @@
 ---
 network_name: "data_forge_network_01"
-redis_image: "redis:7-alpine"
+redis_image: "valkey/valkey:8-alpine"
 redis_container_name: "redis_{{ instance_name }}"
 redis_volume_name: "redis_data_{{ instance_name }}"
 redis_password: ""

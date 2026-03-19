@@ -1,0 +1,12 @@
+---
+- name: "Déploiement d'une instance MariaDB"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_mariadb"
+    host_port: "3310"
+    root_password: ""
+    db_name: ""
+
+  roles:
+    - role: mariadb_instance

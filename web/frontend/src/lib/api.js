@@ -33,6 +33,10 @@ export async function apiGetPostgres() {
   return fetchWithAuth('/api/postgres')
 }
 
+export async function apiGetInternalPostgres() {
+  return fetchWithAuth('/api/postgres?internal=true')
+}
+
 export async function apiGetPostgresInstance(id) {
   return fetchWithAuth(`/api/postgres/${id}`)
 }
@@ -176,6 +180,125 @@ export async function apiCreateMinIO(body) {
 }
 export async function apiDeleteMinIO(id) {
   return fetchWithAuth(`/api/minio/${id}`, { method: 'DELETE' })
+}
+
+// MariaDB
+export async function apiGetMariaDB() {
+  return fetchWithAuth('/api/mariadb')
+}
+export async function apiGetMariaDBInstance(id) {
+  return fetchWithAuth(`/api/mariadb/${id}`)
+}
+export async function apiCreateMariaDB(body) {
+  return fetchWithAuth('/api/mariadb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteMariaDB(id) {
+  return fetchWithAuth(`/api/mariadb/${id}`, { method: 'DELETE' })
+}
+
+// Qdrant
+export async function apiGetQdrant() {
+  return fetchWithAuth('/api/qdrant')
+}
+export async function apiGetQdrantInstance(id) {
+  return fetchWithAuth(`/api/qdrant/${id}`)
+}
+export async function apiCreateQdrant(body) {
+  return fetchWithAuth('/api/qdrant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteQdrant(id) {
+  return fetchWithAuth(`/api/qdrant/${id}`, { method: 'DELETE' })
+}
+
+// ClickHouse
+export async function apiGetClickHouse() {
+  return fetchWithAuth('/api/clickhouse')
+}
+export async function apiGetClickHouseInstance(id) {
+  return fetchWithAuth(`/api/clickhouse/${id}`)
+}
+export async function apiCreateClickHouse(body) {
+  return fetchWithAuth('/api/clickhouse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteClickHouse(id) {
+  return fetchWithAuth(`/api/clickhouse/${id}`, { method: 'DELETE' })
+}
+
+// Ollama
+export async function apiGetOllama() {
+  return fetchWithAuth('/api/ollama')
+}
+export async function apiGetOllamaInstance(id) {
+  return fetchWithAuth(`/api/ollama/${id}`)
+}
+export async function apiCreateOllama(body) {
+  return fetchWithAuth('/api/ollama', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteOllama(id) {
+  return fetchWithAuth(`/api/ollama/${id}`, { method: 'DELETE' })
+}
+export async function apiOllamaListModels(id) {
+  return fetchWithAuth(`/api/ollama/${id}/models`)
+}
+export async function apiOllamaPullModel(id, name) {
+  return fetchWithAuth(`/api/ollama/${id}/models/pull`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  })
+}
+export async function apiOllamaPullStatus(id) {
+  return fetchWithAuth(`/api/ollama/${id}/models/pull-status`)
+}
+export async function apiOllamaDeleteModel(id, name) {
+  return fetchWithAuth(`/api/ollama/${id}/models`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  })
+}
+export async function apiOllamaChat(id, model, messages) {
+  return fetchWithAuth(`/api/ollama/${id}/chat`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, messages }),
+  })
+}
+
+// Superset
+export async function apiGetSuperset() {
+  return fetchWithAuth('/api/superset')
+}
+export async function apiGetSupersetInstance(id) {
+  return fetchWithAuth(`/api/superset/${id}`)
+}
+export async function apiCreateSuperset(body) {
+  return fetchWithAuth('/api/superset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteSuperset(id) {
+  return fetchWithAuth(`/api/superset/${id}`, { method: 'DELETE' })
+}
+
+// Airflow
+export async function apiGetAirflow() {
+  return fetchWithAuth('/api/airflow')
+}
+export async function apiGetAirflowInstance(id) {
+  return fetchWithAuth(`/api/airflow/${id}`)
+}
+export async function apiCreateAirflow(body) {
+  return fetchWithAuth('/api/airflow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteAirflow(id) {
+  return fetchWithAuth(`/api/airflow/${id}`, { method: 'DELETE' })
+}
+
+// Hasura
+export async function apiGetHasura() {
+  return fetchWithAuth('/api/hasura')
+}
+export async function apiGetHasuraInstance(id) {
+  return fetchWithAuth(`/api/hasura/${id}`)
+}
+export async function apiCreateHasura(body) {
+  return fetchWithAuth('/api/hasura', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+export async function apiDeleteHasura(id) {
+  return fetchWithAuth(`/api/hasura/${id}`, { method: 'DELETE' })
 }
 
 // Groups

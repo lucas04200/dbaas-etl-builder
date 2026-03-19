@@ -1,0 +1,10 @@
+---
+- name: "Déploiement d'une instance Ollama"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_ollama"
+    host_port: "11434"
+
+  roles:
+    - role: ollama_instance

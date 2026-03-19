@@ -1,0 +1,26 @@
+---
+- name: "Déploiement d'une instance Airflow avec base interne automatique"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_airflow"
+    host_port: "8090"
+    admin_password: ""
+    internal_pg_password: ""
+    internal_pg_host_port: "15600"
+
+  tasks:
+    - name: Provisionnement de la base PostgreSQL interne pour Airflow
+      include_role:
+        name: internal_pg
+      vars:
+        service_type: "airflow"
+        internal_pg_container: "pg_internal_airflow_{{ instance_name }}"
+        internal_pg_volume: "pg_internal_airflow_data_{{ instance_name }}"
+        internal_pg_user: "airflow"
+        internal_pg_dbname: "airflow"
+        internal_pg_host_port: "{{ internal_pg_host_port }}"
+
+    - name: Déploiement de l'instance Airflow
+      include_role:
+        name: airflow_instance

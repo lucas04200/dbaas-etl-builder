@@ -1,0 +1,23 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Déploiement du conteneur Hasura
+  community.docker.docker_container:
+    name: "{{ hasura_container_name }}"
+    image: "{{ hasura_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    published_ports:
+      - "{{ host_port }}:8080"
+    env:
+      HASURA_GRAPHQL_DATABASE_URL: "postgresql://{{ linked_pg_user }}:{{ linked_pg_password }}@{{ linked_pg_host }}:5432/{{ linked_pg_dbname }}"
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: "{{ admin_secret }}"
+      HASURA_GRAPHQL_DEV_MODE: "false"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

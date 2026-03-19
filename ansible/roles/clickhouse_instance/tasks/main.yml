@@ -1,0 +1,51 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance ClickHouse
+  community.docker.docker_volume:
+    name: "{{ clickhouse_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur ClickHouse (sans mot de passe)
+  community.docker.docker_container:
+    name: "{{ clickhouse_container_name }}"
+    image: "{{ clickhouse_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ clickhouse_volume_name }}:/var/lib/clickhouse"
+    published_ports:
+      - "{{ host_port }}:8123"
+    env:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      - "nofile:262144:262144"
+  when: clickhouse_password == ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
+
+- name: Déploiement du conteneur ClickHouse (avec mot de passe)
+  community.docker.docker_container:
+    name: "{{ clickhouse_container_name }}"
+    image: "{{ clickhouse_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ clickhouse_volume_name }}:/var/lib/clickhouse"
+    published_ports:
+      - "{{ host_port }}:8123"
+    env:
+      CLICKHOUSE_PASSWORD: "{{ clickhouse_password }}"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      - "nofile:262144:262144"
+  when: clickhouse_password != ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

@@ -1,0 +1,7 @@
+---
+network_name: "data_forge_network_01"
+mariadb_image: "mariadb:11"
+mariadb_container_name: "mariadb_{{ instance_name }}"
+mariadb_volume_name: "mariadb_data_{{ instance_name }}"
+root_password: ""
+db_name: ""

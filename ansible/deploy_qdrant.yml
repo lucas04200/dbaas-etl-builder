@@ -1,0 +1,10 @@
+---
+- name: "Déploiement d'une instance Qdrant"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_qdrant"
+    host_port: "6333"
+
+  roles:
+    - role: qdrant_instance

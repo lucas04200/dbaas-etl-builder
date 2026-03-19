@@ -12,7 +12,9 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
 import time
+import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Generator, Optional
@@ -104,15 +106,18 @@ def init_db() -> str:
                 CREATE INDEX IF NOT EXISTS idx_rt_user ON refresh_tokens(user_id);
 
                 CREATE TABLE IF NOT EXISTS postgres_instances (
-                    id          SERIAL PRIMARY KEY,
-                    name        VARCHAR(64) UNIQUE NOT NULL,
-                    db_name     VARCHAR(64) NOT NULL,
-                    db_user     VARCHAR(64) NOT NULL,
-                    db_password TEXT        NOT NULL,
-                    host_port   INTEGER     NOT NULL,
-                    status      VARCHAR(16) DEFAULT 'provisioning',
-                    created_at  TIMESTAMPTZ DEFAULT NOW(),
-                    created_by  INTEGER     REFERENCES users(id)
+                    id               SERIAL PRIMARY KEY,
+                    name             VARCHAR(64) UNIQUE NOT NULL,
+                    db_name          VARCHAR(64) NOT NULL,
+                    db_user          VARCHAR(64) NOT NULL,
+                    db_password      TEXT        NOT NULL,
+                    host_port        INTEGER     NOT NULL,
+                    status           VARCHAR(16) DEFAULT 'provisioning',
+                    is_internal      BOOLEAN     DEFAULT FALSE,
+                    internal_for_type VARCHAR(32),
+                    internal_for_id  INTEGER,
+                    created_at       TIMESTAMPTZ DEFAULT NOW(),
+                    created_by       INTEGER     REFERENCES users(id)
                 );
 
                 CREATE TABLE IF NOT EXISTS n8n_instances (
@@ -199,6 +204,78 @@ def init_db() -> str:
                     created_at   TIMESTAMPTZ DEFAULT NOW(),
                     created_by   INTEGER     REFERENCES users(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS mariadb_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    root_password TEXT       NOT NULL,
+                    db_name      VARCHAR(64) DEFAULT '',
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS qdrant_instances (
+                    id         SERIAL PRIMARY KEY,
+                    name       VARCHAR(64) UNIQUE NOT NULL,
+                    host_port  INTEGER     NOT NULL,
+                    status     VARCHAR(16) DEFAULT 'provisioning',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    created_by INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS clickhouse_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    password     TEXT        DEFAULT '',
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS ollama_instances (
+                    id         SERIAL PRIMARY KEY,
+                    name       VARCHAR(64) UNIQUE NOT NULL,
+                    host_port  INTEGER     NOT NULL,
+                    status     VARCHAR(16) DEFAULT 'provisioning',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    created_by INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS superset_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     REFERENCES postgres_instances(id) ON DELETE SET NULL,
+                    admin_password TEXT      NOT NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS airflow_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     REFERENCES postgres_instances(id) ON DELETE SET NULL,
+                    admin_password TEXT      NOT NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS hasura_instances (
+                    id           SERIAL PRIMARY KEY,
+                    name         VARCHAR(64) UNIQUE NOT NULL,
+                    host_port    INTEGER     NOT NULL,
+                    linked_pg_id INTEGER     NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+                    admin_secret TEXT        NOT NULL,
+                    status       VARCHAR(16) DEFAULT 'provisioning',
+                    created_at   TIMESTAMPTZ DEFAULT NOW(),
+                    created_by   INTEGER     REFERENCES users(id)
+                );
             """)
 
             cur.execute("SELECT value FROM app_config WHERE key = 'secret_key'")
@@ -211,6 +288,11 @@ def init_db() -> str:
                     "INSERT INTO app_config (key, value) VALUES ('secret_key', %s)",
                     (secret,),
                 )
+
+            # Migrations for existing databases
+            cur.execute("ALTER TABLE postgres_instances ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT FALSE")
+            cur.execute("ALTER TABLE postgres_instances ADD COLUMN IF NOT EXISTS internal_for_type VARCHAR(32)")
+            cur.execute("ALTER TABLE postgres_instances ADD COLUMN IF NOT EXISTS internal_for_id INTEGER")
 
             cur.execute("SELECT COUNT(*) AS n FROM users")
             if cur.fetchone()["n"] == 0:
@@ -263,6 +345,13 @@ def _next_port(conn, base: int) -> int:
             UNION ALL SELECT host_port FROM mage_instances
             UNION ALL SELECT host_port FROM minio_instances
             UNION ALL SELECT console_port AS host_port FROM minio_instances
+            UNION ALL SELECT host_port FROM mariadb_instances
+            UNION ALL SELECT host_port FROM qdrant_instances
+            UNION ALL SELECT host_port FROM clickhouse_instances
+            UNION ALL SELECT host_port FROM ollama_instances
+            UNION ALL SELECT host_port FROM superset_instances
+            UNION ALL SELECT host_port FROM airflow_instances
+            UNION ALL SELECT host_port FROM hasura_instances
         """)
         used = {r["host_port"] for r in cur.fetchall()}
     used.add(DB_PORT)
@@ -582,12 +671,19 @@ def _valid_identifier(s: str) -> bool:
 
 
 @app.get("/api/postgres")
-def list_postgres(_: dict = Depends(get_current_user), db=Depends(get_db)):
+def list_postgres(internal: bool = False, _: dict = Depends(get_current_user), db=Depends(get_db)):
     with _cursor(db) as cur:
-        cur.execute(
-            "SELECT id, name, db_name, db_user, host_port, status, created_at "
-            "FROM postgres_instances ORDER BY created_at DESC"
-        )
+        if internal:
+            cur.execute(
+                "SELECT id, name, db_name, db_user, host_port, status, created_at, "
+                "is_internal, internal_for_type, internal_for_id "
+                "FROM postgres_instances WHERE is_internal = TRUE ORDER BY created_at DESC"
+            )
+        else:
+            cur.execute(
+                "SELECT id, name, db_name, db_user, host_port, status, created_at "
+                "FROM postgres_instances WHERE is_internal IS NOT TRUE ORDER BY created_at DESC"
+            )
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -1047,21 +1143,20 @@ def remove_permission(group_id: int, perm_id: int,
 # ── Metabase provisioning ──────────────────────────────────────────────────────
 
 async def _provision_metabase(instance_id: int, name: str, port: int,
-                               linked_pg: Optional[dict]):
-    extra: dict = {"instance_name": name, "host_port": port}
-    if linked_pg:
-        extra.update({
-            "linked_pg_host":     f"pg_{linked_pg['name']}",
-            "linked_pg_dbname":   linked_pg["db_name"],
-            "linked_pg_user":     linked_pg["db_user"],
-            "linked_pg_password": linked_pg["db_password"],
-        })
-    code, _ = await _run_ansible("deploy_metabase.yml", extra)
+                               internal_pg_id: int, internal_pg_port: int,
+                               internal_pg_password: str):
+    code, _ = await _run_ansible("deploy_metabase.yml", {
+        "instance_name":        name,
+        "host_port":            port,
+        "internal_pg_password": internal_pg_password,
+        "internal_pg_host_port": internal_pg_port,
+    })
     status = "running" if code == 0 else "error"
     conn = _pool.getconn()
     try:
         with _cursor(conn) as cur:
             cur.execute("UPDATE metabase_instances SET status = %s WHERE id = %s", (status, instance_id))
+            cur.execute("UPDATE postgres_instances SET status = %s WHERE id = %s", (status, internal_pg_id))
         conn.commit()
     finally:
         _pool.putconn(conn)
@@ -1140,23 +1235,145 @@ async def _provision_minio(instance_id: int, name: str, port: int, console_port:
         _pool.putconn(conn)
 
 
+async def _provision_mariadb(instance_id: int, name: str, port: int,
+                              root_password: str, db_name: str):
+    code, _ = await _run_ansible("deploy_mariadb.yml", {
+        "instance_name": name,
+        "host_port":     port,
+        "root_password": root_password,
+        "db_name":       db_name,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE mariadb_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_qdrant(instance_id: int, name: str, port: int):
+    code, _ = await _run_ansible("deploy_qdrant.yml", {
+        "instance_name": name,
+        "host_port":     port,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE qdrant_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_clickhouse(instance_id: int, name: str, port: int, password: str):
+    code, _ = await _run_ansible("deploy_clickhouse.yml", {
+        "instance_name":      name,
+        "host_port":          port,
+        "clickhouse_password": password,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE clickhouse_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_ollama(instance_id: int, name: str, port: int):
+    code, _ = await _run_ansible("deploy_ollama.yml", {
+        "instance_name": name,
+        "host_port":     port,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE ollama_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_superset(instance_id: int, name: str, port: int,
+                               internal_pg_id: int, internal_pg_port: int,
+                               internal_pg_password: str, admin_password: str,
+                               superset_secret_key: str):
+    code, _ = await _run_ansible("deploy_superset.yml", {
+        "instance_name":        name,
+        "host_port":            port,
+        "internal_pg_password": internal_pg_password,
+        "internal_pg_host_port": internal_pg_port,
+        "admin_password":       admin_password,
+        "superset_secret_key":  superset_secret_key,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE superset_instances SET status = %s WHERE id = %s", (status, instance_id))
+            cur.execute("UPDATE postgres_instances SET status = %s WHERE id = %s", (status, internal_pg_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_airflow(instance_id: int, name: str, port: int,
+                              internal_pg_id: int, internal_pg_port: int,
+                              internal_pg_password: str, admin_password: str):
+    code, _ = await _run_ansible("deploy_airflow.yml", {
+        "instance_name":        name,
+        "host_port":            port,
+        "internal_pg_password": internal_pg_password,
+        "internal_pg_host_port": internal_pg_port,
+        "admin_password":       admin_password,
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE airflow_instances SET status = %s WHERE id = %s", (status, instance_id))
+            cur.execute("UPDATE postgres_instances SET status = %s WHERE id = %s", (status, internal_pg_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
+async def _provision_hasura(instance_id: int, name: str, port: int,
+                             linked_pg: dict, admin_secret: str):
+    code, _ = await _run_ansible("deploy_hasura.yml", {
+        "instance_name":      name,
+        "host_port":          port,
+        "admin_secret":       admin_secret,
+        "linked_pg_host":     f"pg_{linked_pg['name']}",
+        "linked_pg_dbname":   linked_pg["db_name"],
+        "linked_pg_user":     linked_pg["db_user"],
+        "linked_pg_password": linked_pg["db_password"],
+    })
+    status = "running" if code == 0 else "error"
+    conn = _pool.getconn()
+    try:
+        with _cursor(conn) as cur:
+            cur.execute("UPDATE hasura_instances SET status = %s WHERE id = %s", (status, instance_id))
+        conn.commit()
+    finally:
+        _pool.putconn(conn)
+
+
 # ── Metabase Instances API ─────────────────────────────────────────────────────
 
 class CreateMetabaseRequest(BaseModel):
     name: str
-    linked_pg_id: Optional[int] = None
 
 
 @app.get("/api/metabase")
 def list_metabase(_: dict = Depends(get_current_user), db=Depends(get_db)):
     with _cursor(db) as cur:
-        cur.execute("""
-            SELECT m.id, m.name, m.host_port, m.status, m.created_at,
-                   p.name AS linked_pg_name
-            FROM   metabase_instances m
-            LEFT JOIN postgres_instances p ON p.id = m.linked_pg_id
-            ORDER  BY m.created_at DESC
-        """)
+        cur.execute("SELECT id, name, host_port, status, created_at FROM metabase_instances ORDER BY created_at DESC")
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -1175,26 +1392,45 @@ def create_metabase(body: CreateMetabaseRequest, bg: BackgroundTasks,
                     user: dict = Depends(require_admin), db=Depends(get_db)):
     if not _valid_identifier(body.name):
         raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
-    linked_pg = None
-    if body.linked_pg_id:
-        with _cursor(db) as cur:
-            cur.execute("SELECT * FROM postgres_instances WHERE id = %s", (body.linked_pg_id,))
-            row = cur.fetchone()
-        if not row:
-            raise HTTPException(404, "Instance PostgreSQL introuvable")
-        linked_pg = dict(row)
-    port = _next_port(db, 3000)
+
+    metabase_port   = _next_port(db, 3000)
+    internal_pg_port = _next_port(db, 15000)
+    internal_pg_password = secrets.token_urlsafe(16)
+    internal_pg_name = f"intpg_meta_{body.name}"
+
     try:
+        # Enregistrement de la base interne (invisible dans la liste principale)
+        with _cursor(db) as cur:
+            cur.execute(
+                """INSERT INTO postgres_instances
+                   (name, db_name, db_user, db_password, host_port,
+                    is_internal, internal_for_type, created_by)
+                   VALUES (%s, %s, %s, %s, %s, TRUE, 'metabase', %s) RETURNING id""",
+                (internal_pg_name, "metabase", "metabase",
+                 internal_pg_password, internal_pg_port, user["id"]),
+            )
+            internal_pg_id = cur.fetchone()["id"]
+
+        # Enregistrement de l'instance Metabase
         with _cursor(db) as cur:
             cur.execute(
                 "INSERT INTO metabase_instances (name, host_port, linked_pg_id, created_by) VALUES (%s, %s, %s, %s) RETURNING id",
-                (body.name, port, body.linked_pg_id, user["id"]),
+                (body.name, metabase_port, internal_pg_id, user["id"]),
             )
             instance_id = cur.fetchone()["id"]
+
+        # Liaison retour : internal_pg sait à quelle instance Metabase il appartient
+        with _cursor(db) as cur:
+            cur.execute(
+                "UPDATE postgres_instances SET internal_for_id = %s WHERE id = %s",
+                (instance_id, internal_pg_id),
+            )
     except psycopg2.errors.UniqueViolation:
         raise HTTPException(409, "Une instance avec ce nom existe déjà")
-    bg.add_task(_provision_metabase, instance_id, body.name, port, linked_pg)
-    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+    bg.add_task(_provision_metabase, instance_id, body.name, metabase_port,
+                internal_pg_id, internal_pg_port, internal_pg_password)
+    return {"id": instance_id, "port": metabase_port, "status": "provisioning"}
 
 
 @app.delete("/api/metabase/{instance_id}")
@@ -1205,9 +1441,24 @@ def delete_metabase(instance_id: int, bg: BackgroundTasks,
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, "Instance introuvable")
+
+    # Trouver et supprimer la base interne associée
+    with _cursor(db) as cur:
+        cur.execute(
+            "SELECT id, name FROM postgres_instances WHERE internal_for_type = 'metabase' AND internal_for_id = %s",
+            (instance_id,),
+        )
+        internal_pg = cur.fetchone()
+
     with _cursor(db) as cur:
         cur.execute("DELETE FROM metabase_instances WHERE id = %s", (instance_id,))
+    if internal_pg:
+        with _cursor(db) as cur:
+            cur.execute("DELETE FROM postgres_instances WHERE id = %s", (internal_pg["id"],))
+
     bg.add_task(_docker_remove, f"metabase_{row['name']}")
+    if internal_pg:
+        bg.add_task(_docker_remove, f"pg_internal_metabase_{row['name']}")
     return {"ok": True}
 
 
@@ -1477,6 +1728,720 @@ def delete_minio(instance_id: int, bg: BackgroundTasks,
         cur.execute("DELETE FROM minio_instances WHERE id = %s", (instance_id,))
     bg.add_task(_docker_remove, f"minio_{row['name']}")
     return {"ok": True}
+
+
+# ── MariaDB Instances API ──────────────────────────────────────────────────────
+
+class CreateMariaDBRequest(BaseModel):
+    name: str
+    root_password: str
+    db_name: str = ""
+
+
+@app.get("/api/mariadb")
+def list_mariadb(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, db_name, status, created_at FROM mariadb_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/mariadb/{instance_id}")
+def get_mariadb(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, db_name, status, created_at FROM mariadb_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/mariadb", status_code=201)
+def create_mariadb(body: CreateMariaDBRequest, bg: BackgroundTasks,
+                   user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    if not body.root_password:
+        raise HTTPException(400, "Le mot de passe root est requis")
+    resolved_db_name = body.db_name or body.name
+    port = _next_port(db, 3310)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO mariadb_instances (name, host_port, root_password, db_name, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.root_password, resolved_db_name, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_mariadb, instance_id, body.name, port, body.root_password, resolved_db_name)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/mariadb/{instance_id}")
+def delete_mariadb(instance_id: int, bg: BackgroundTasks,
+                   _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM mariadb_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM mariadb_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"mariadb_{row['name']}")
+    return {"ok": True}
+
+
+# ── Qdrant Instances API ───────────────────────────────────────────────────────
+
+class CreateQdrantRequest(BaseModel):
+    name: str
+
+
+@app.get("/api/qdrant")
+def list_qdrant(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM qdrant_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/qdrant/{instance_id}")
+def get_qdrant(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM qdrant_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/qdrant", status_code=201)
+def create_qdrant(body: CreateQdrantRequest, bg: BackgroundTasks,
+                  user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    port = _next_port(db, 6333)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO qdrant_instances (name, host_port, created_by) VALUES (%s, %s, %s) RETURNING id",
+                (body.name, port, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_qdrant, instance_id, body.name, port)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/qdrant/{instance_id}")
+def delete_qdrant(instance_id: int, bg: BackgroundTasks,
+                  _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM qdrant_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM qdrant_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"qdrant_{row['name']}")
+    return {"ok": True}
+
+
+# ── ClickHouse Instances API ───────────────────────────────────────────────────
+
+class CreateClickHouseRequest(BaseModel):
+    name: str
+    password: str = ""
+
+
+@app.get("/api/clickhouse")
+def list_clickhouse(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM clickhouse_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/clickhouse/{instance_id}")
+def get_clickhouse(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM clickhouse_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/clickhouse", status_code=201)
+def create_clickhouse(body: CreateClickHouseRequest, bg: BackgroundTasks,
+                      user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    port = _next_port(db, 8140)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO clickhouse_instances (name, host_port, password, created_by) VALUES (%s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.password, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_clickhouse, instance_id, body.name, port, body.password)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/clickhouse/{instance_id}")
+def delete_clickhouse(instance_id: int, bg: BackgroundTasks,
+                      _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM clickhouse_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM clickhouse_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"clickhouse_{row['name']}")
+    return {"ok": True}
+
+
+# ── Ollama Instances API ───────────────────────────────────────────────────────
+
+class CreateOllamaRequest(BaseModel):
+    name: str
+
+
+@app.get("/api/ollama")
+def list_ollama(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM ollama_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/ollama/{instance_id}")
+def get_ollama(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM ollama_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/ollama", status_code=201)
+def create_ollama(body: CreateOllamaRequest, bg: BackgroundTasks,
+                  user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    port = _next_port(db, 11434)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO ollama_instances (name, host_port, created_by) VALUES (%s, %s, %s) RETURNING id",
+                (body.name, port, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_ollama, instance_id, body.name, port)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/ollama/{instance_id}")
+def delete_ollama(instance_id: int, bg: BackgroundTasks,
+                  _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM ollama_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM ollama_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"ollama_{row['name']}")
+    return {"ok": True}
+
+
+# ── Ollama Model Management ────────────────────────────────────────────────────
+
+# In-memory pull status: {instance_id: {model_name: "pulling"|"done"|"error"}}
+_ollama_pull_status: dict[int, dict[str, str]] = {}
+
+
+def _ollama_url(db, instance_id: int) -> tuple[str, str]:
+    """Returns (base_url, instance_name) or raises 404."""
+    with _cursor(db) as cur:
+        cur.execute("SELECT name, host_port, status FROM ollama_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    if row["status"] != "running":
+        raise HTTPException(409, "Instance non démarrée")
+    return f"http://localhost:{row['host_port']}", row["name"]
+
+
+def _ollama_get(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=8) as r:
+        return json.loads(r.read())
+
+
+def _ollama_post(url: str, payload: dict) -> dict:
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())
+
+
+def _ollama_delete(url: str, payload: dict):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="DELETE")
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read())
+
+
+@app.get("/api/ollama/{instance_id}/models")
+def ollama_list_models(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    base_url, _ = _ollama_url(db, instance_id)
+    try:
+        data = _ollama_get(f"{base_url}/api/tags")
+        return {"models": data.get("models", [])}
+    except Exception:
+        return {"models": []}
+
+
+class OllamaPullRequest(BaseModel):
+    name: str
+
+
+async def _do_ollama_pull(instance_id: int, base_url: str, model: str):
+    _ollama_pull_status.setdefault(instance_id, {})[model] = "pulling"
+    try:
+        # stream=false → single JSON response when done
+        _ollama_post(f"{base_url}/api/pull", {"name": model, "stream": False})
+        _ollama_pull_status[instance_id][model] = "done"
+    except Exception:
+        _ollama_pull_status[instance_id][model] = "error"
+
+
+@app.post("/api/ollama/{instance_id}/models/pull")
+def ollama_pull_model(instance_id: int, body: OllamaPullRequest,
+                      bg: BackgroundTasks,
+                      _: dict = Depends(require_admin), db=Depends(get_db)):
+    base_url, _ = _ollama_url(db, instance_id)
+    bg.add_task(_do_ollama_pull, instance_id, base_url, body.name)
+    return {"ok": True}
+
+
+@app.get("/api/ollama/{instance_id}/models/pull-status")
+def ollama_pull_status(instance_id: int, _: dict = Depends(get_current_user)):
+    return _ollama_pull_status.get(instance_id, {})
+
+
+class OllamaDeleteModelRequest(BaseModel):
+    name: str
+
+
+@app.delete("/api/ollama/{instance_id}/models")
+def ollama_delete_model(instance_id: int, body: OllamaDeleteModelRequest,
+                        _: dict = Depends(require_admin), db=Depends(get_db)):
+    base_url, _ = _ollama_url(db, instance_id)
+    try:
+        _ollama_delete(f"{base_url}/api/delete", {"name": body.name})
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"ok": True}
+
+
+class OllamaChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class OllamaChatRequest(BaseModel):
+    model: str
+    messages: list[OllamaChatMessage]
+
+
+@app.post("/api/ollama/{instance_id}/chat")
+def ollama_chat(instance_id: int, body: OllamaChatRequest,
+                _: dict = Depends(get_current_user), db=Depends(get_db)):
+    base_url, _ = _ollama_url(db, instance_id)
+    try:
+        result = _ollama_post(f"{base_url}/api/chat", {
+            "model": body.model,
+            "messages": [{"role": m.role, "content": m.content} for m in body.messages],
+            "stream": False,
+        })
+        return {"message": result.get("message", {})}
+    except Exception as e:
+        raise HTTPException(500, f"Erreur Ollama : {e}")
+
+
+# ── Superset Instances API ─────────────────────────────────────────────────────
+
+class CreateSupersetRequest(BaseModel):
+    name: str
+    admin_password: str
+
+
+@app.get("/api/superset")
+def list_superset(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM superset_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/superset/{instance_id}")
+def get_superset(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM superset_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/superset", status_code=201)
+def create_superset(body: CreateSupersetRequest, bg: BackgroundTasks,
+                    user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    if not body.admin_password:
+        raise HTTPException(400, "Le mot de passe administrateur est requis")
+
+    superset_port     = _next_port(db, 8088)
+    internal_pg_port  = _next_port(db, 15500)
+    internal_pg_password = secrets.token_urlsafe(16)
+    internal_pg_name  = f"intpg_superset_{body.name}"
+    superset_secret_key = secrets.token_hex(32)
+
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                """INSERT INTO postgres_instances
+                   (name, db_name, db_user, db_password, host_port,
+                    is_internal, internal_for_type, created_by)
+                   VALUES (%s, %s, %s, %s, %s, TRUE, 'superset', %s) RETURNING id""",
+                (internal_pg_name, "superset", "superset",
+                 internal_pg_password, internal_pg_port, user["id"]),
+            )
+            internal_pg_id = cur.fetchone()["id"]
+
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO superset_instances (name, host_port, linked_pg_id, admin_password, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (body.name, superset_port, internal_pg_id, body.admin_password, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+
+        with _cursor(db) as cur:
+            cur.execute(
+                "UPDATE postgres_instances SET internal_for_id = %s WHERE id = %s",
+                (instance_id, internal_pg_id),
+            )
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+
+    bg.add_task(_provision_superset, instance_id, body.name, superset_port,
+                internal_pg_id, internal_pg_port, internal_pg_password,
+                body.admin_password, superset_secret_key)
+    return {"id": instance_id, "port": superset_port, "status": "provisioning"}
+
+
+@app.delete("/api/superset/{instance_id}")
+def delete_superset(instance_id: int, bg: BackgroundTasks,
+                    _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM superset_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+
+    with _cursor(db) as cur:
+        cur.execute(
+            "SELECT id, name FROM postgres_instances WHERE internal_for_type = 'superset' AND internal_for_id = %s",
+            (instance_id,),
+        )
+        internal_pg = cur.fetchone()
+
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM superset_instances WHERE id = %s", (instance_id,))
+    if internal_pg:
+        with _cursor(db) as cur:
+            cur.execute("DELETE FROM postgres_instances WHERE id = %s", (internal_pg["id"],))
+
+    bg.add_task(_docker_remove, f"superset_{row['name']}")
+    if internal_pg:
+        bg.add_task(_docker_remove, f"pg_internal_superset_{row['name']}")
+    return {"ok": True}
+
+
+# ── Airflow Instances API ──────────────────────────────────────────────────────
+
+class CreateAirflowRequest(BaseModel):
+    name: str
+    admin_password: str
+
+
+@app.get("/api/airflow")
+def list_airflow(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM airflow_instances ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/airflow/{instance_id}")
+def get_airflow(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM airflow_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/airflow", status_code=201)
+def create_airflow(body: CreateAirflowRequest, bg: BackgroundTasks,
+                   user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    if not body.admin_password:
+        raise HTTPException(400, "Le mot de passe administrateur est requis")
+
+    airflow_port      = _next_port(db, 8090)
+    internal_pg_port  = _next_port(db, 15600)
+    internal_pg_password = secrets.token_urlsafe(16)
+    internal_pg_name  = f"intpg_airflow_{body.name}"
+
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                """INSERT INTO postgres_instances
+                   (name, db_name, db_user, db_password, host_port,
+                    is_internal, internal_for_type, created_by)
+                   VALUES (%s, %s, %s, %s, %s, TRUE, 'airflow', %s) RETURNING id""",
+                (internal_pg_name, "airflow", "airflow",
+                 internal_pg_password, internal_pg_port, user["id"]),
+            )
+            internal_pg_id = cur.fetchone()["id"]
+
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO airflow_instances (name, host_port, linked_pg_id, admin_password, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (body.name, airflow_port, internal_pg_id, body.admin_password, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+
+        with _cursor(db) as cur:
+            cur.execute(
+                "UPDATE postgres_instances SET internal_for_id = %s WHERE id = %s",
+                (instance_id, internal_pg_id),
+            )
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+
+    bg.add_task(_provision_airflow, instance_id, body.name, airflow_port,
+                internal_pg_id, internal_pg_port, internal_pg_password, body.admin_password)
+    return {"id": instance_id, "port": airflow_port, "status": "provisioning"}
+
+
+@app.delete("/api/airflow/{instance_id}")
+def delete_airflow(instance_id: int, bg: BackgroundTasks,
+                   _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM airflow_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+
+    with _cursor(db) as cur:
+        cur.execute(
+            "SELECT id, name FROM postgres_instances WHERE internal_for_type = 'airflow' AND internal_for_id = %s",
+            (instance_id,),
+        )
+        internal_pg = cur.fetchone()
+
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM airflow_instances WHERE id = %s", (instance_id,))
+    if internal_pg:
+        with _cursor(db) as cur:
+            cur.execute("DELETE FROM postgres_instances WHERE id = %s", (internal_pg["id"],))
+
+    bg.add_task(_docker_remove, f"airflow_{row['name']}")
+    if internal_pg:
+        bg.add_task(_docker_remove, f"pg_internal_airflow_{row['name']}")
+    return {"ok": True}
+
+
+# ── Hasura Instances API ───────────────────────────────────────────────────────
+
+class CreateHasuraRequest(BaseModel):
+    name: str
+    linked_pg_id: int
+    admin_secret: str
+
+
+@app.get("/api/hasura")
+def list_hasura(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("""
+            SELECT h.id, h.name, h.host_port, h.status, h.created_at,
+                   p.name AS linked_pg_name
+            FROM   hasura_instances h
+            JOIN   postgres_instances p ON p.id = h.linked_pg_id
+            ORDER  BY h.created_at DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+@app.get("/api/hasura/{instance_id}")
+def get_hasura(instance_id: int, _: dict = Depends(get_current_user), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT id, name, host_port, status, created_at FROM hasura_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    return dict(row)
+
+
+@app.post("/api/hasura", status_code=201)
+def create_hasura(body: CreateHasuraRequest, bg: BackgroundTasks,
+                  user: dict = Depends(require_admin), db=Depends(get_db)):
+    if not _valid_identifier(body.name):
+        raise HTTPException(400, "Nom invalide — lettres, chiffres, _ et - uniquement")
+    if not body.admin_secret:
+        raise HTTPException(400, "Le secret administrateur est requis")
+    with _cursor(db) as cur:
+        cur.execute("SELECT * FROM postgres_instances WHERE id = %s AND is_internal = FALSE", (body.linked_pg_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance PostgreSQL introuvable")
+    linked_pg = dict(row)
+    port = _next_port(db, 8280)
+    try:
+        with _cursor(db) as cur:
+            cur.execute(
+                "INSERT INTO hasura_instances (name, host_port, linked_pg_id, admin_secret, created_by) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (body.name, port, body.linked_pg_id, body.admin_secret, user["id"]),
+            )
+            instance_id = cur.fetchone()["id"]
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(409, "Une instance avec ce nom existe déjà")
+    bg.add_task(_provision_hasura, instance_id, body.name, port, linked_pg, body.admin_secret)
+    return {"id": instance_id, "port": port, "status": "provisioning"}
+
+
+@app.delete("/api/hasura/{instance_id}")
+def delete_hasura(instance_id: int, bg: BackgroundTasks,
+                  _: dict = Depends(require_admin), db=Depends(get_db)):
+    with _cursor(db) as cur:
+        cur.execute("SELECT name FROM hasura_instances WHERE id = %s", (instance_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Instance introuvable")
+    with _cursor(db) as cur:
+        cur.execute("DELETE FROM hasura_instances WHERE id = %s", (instance_id,))
+    bg.add_task(_docker_remove, f"hasura_{row['name']}")
+    return {"ok": True}
+
+
+# ── Service Library ────────────────────────────────────────────────────────────
+
+# Pull status tracked in-process (resets on server restart, acceptable)
+_pull_status: dict[str, str] = {}
+
+_SERVICE_CATALOG = [
+    {"id": "postgres",   "dockerImage": "postgres:16-alpine"},
+    {"id": "mariadb",    "dockerImage": "mariadb:11"},
+    {"id": "qdrant",     "dockerImage": "qdrant/qdrant:latest"},
+    {"id": "clickhouse", "dockerImage": "clickhouse/clickhouse-server:latest"},
+    {"id": "metabase",   "dockerImage": "metabase/metabase:latest"},
+    {"id": "superset",   "dockerImage": "apache/superset:latest"},
+    {"id": "mage",       "dockerImage": "mageai/mageai:latest"},
+    {"id": "airflow",    "dockerImage": "apache/airflow:2-python3.11"},
+    {"id": "postgrest",  "dockerImage": "postgrest/postgrest:latest"},
+    {"id": "hasura",     "dockerImage": "hasura/graphql-engine:latest"},
+    {"id": "valkey",     "dockerImage": "valkey/valkey:8-alpine"},
+    {"id": "minio",      "dockerImage": "minio/minio:latest"},
+    {"id": "ollama",     "dockerImage": "ollama/ollama:latest"},
+]
+_DEFAULT_ENABLED = {"postgres", "metabase", "valkey", "postgrest", "mage", "minio"}
+
+
+def _get_enabled_services(db) -> set:
+    with _cursor(db) as cur:
+        cur.execute("SELECT value FROM app_config WHERE key = 'enabled_services'")
+        row = cur.fetchone()
+    return set(json.loads(row["value"])) if row else set(_DEFAULT_ENABLED)
+
+
+def _set_enabled_services(db, enabled: set):
+    with _cursor(db) as cur:
+        cur.execute(
+            """INSERT INTO app_config (key, value) VALUES ('enabled_services', %s)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+            (json.dumps(list(enabled)),),
+        )
+
+
+async def _do_pull_image(image: str):
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "pull", image,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate()
+    _pull_status[image] = "pulled" if proc.returncode == 0 else "error"
+
+
+@app.get("/api/library/enabled")
+def library_enabled(_: dict = Depends(get_current_user), db=Depends(get_db)):
+    return {"enabled": list(_get_enabled_services(db))}
+
+
+@app.post("/api/library/{service_id}/enable")
+def library_enable(service_id: str, _: dict = Depends(require_admin), db=Depends(get_db)):
+    if not any(s["id"] == service_id for s in _SERVICE_CATALOG):
+        raise HTTPException(404, "Service inconnu")
+    enabled = _get_enabled_services(db)
+    enabled.add(service_id)
+    _set_enabled_services(db, enabled)
+    return {"ok": True}
+
+
+@app.delete("/api/library/{service_id}/enable")
+def library_disable(service_id: str, _: dict = Depends(require_admin), db=Depends(get_db)):
+    enabled = _get_enabled_services(db)
+    enabled.discard(service_id)
+    _set_enabled_services(db, enabled)
+    return {"ok": True}
+
+
+@app.post("/api/library/{service_id}/pull")
+def library_pull(service_id: str, bg: BackgroundTasks, _: dict = Depends(require_admin)):
+    svc = next((s for s in _SERVICE_CATALOG if s["id"] == service_id), None)
+    if not svc:
+        raise HTTPException(404, "Service inconnu")
+    image = svc["dockerImage"]
+    _pull_status[image] = "pulling"
+    bg.add_task(_do_pull_image, image)
+    return {"ok": True, "image": image}
+
+
+@app.get("/api/library/pull-status")
+def library_pull_status(_: dict = Depends(get_current_user)):
+    # Detect images already present locally that we haven't tracked yet
+    try:
+        result = subprocess.run(
+            ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        local_images = set(result.stdout.splitlines())
+        for svc in _SERVICE_CATALOG:
+            img = svc["dockerImage"]
+            if img not in _pull_status and img in local_images:
+                _pull_status[img] = "pulled"
+    except Exception:
+        pass
+    return _pull_status
 
 
 # ── SPA fallback ───────────────────────────────────────────────────────────────

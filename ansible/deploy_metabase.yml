@@ -1,14 +1,30 @@
 ---
-- name: "Déploiement d'une instance Metabase (BI)"
+- name: "Déploiement d'une instance Metabase avec base interne automatique"
   hosts: docker_hosts
 
   vars:
     instance_name: "default_metabase"
     host_port: "3000"
-    linked_pg_host: ""
-    linked_pg_dbname: ""
-    linked_pg_user: ""
-    linked_pg_password: ""
+    internal_pg_password: ""
+    internal_pg_host_port: "15000"
 
-  roles:
-    - role: metabase_instance
+  tasks:
+    - name: Provisionnement de la base PostgreSQL interne pour Metabase
+      include_role:
+        name: internal_pg
+      vars:
+        service_type: "metabase"
+        internal_pg_container: "pg_internal_metabase_{{ instance_name }}"
+        internal_pg_volume: "pg_internal_metabase_data_{{ instance_name }}"
+        internal_pg_user: "metabase"
+        internal_pg_dbname: "metabase"
+        internal_pg_host_port: "{{ internal_pg_host_port }}"
+
+    - name: Déploiement de l'instance Metabase
+      include_role:
+        name: metabase_instance
+      vars:
+        linked_pg_host: "pg_internal_metabase_{{ instance_name }}"
+        linked_pg_dbname: "metabase"
+        linked_pg_user: "metabase"
+        linked_pg_password: "{{ internal_pg_password }}"

@@ -1,5 +1,5 @@
 <template>
-  <div style="display:flex;min-height:100vh">
+  <div style="display:flex;min-height:100vh;width:100%;flex:1">
     <AppSidebar />
     <div class="main">
       <AppTopbar />
