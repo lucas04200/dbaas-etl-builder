@@ -74,6 +74,11 @@ jobs:
           done
           echo "v PostgreSQL prêt"
 
+      - name: "[Setup] Préparer l'environnement Node.js pour le GitHub Runner"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: "[Build] 4. Build du frontend Vue"
         run: |
           cd web/frontend
