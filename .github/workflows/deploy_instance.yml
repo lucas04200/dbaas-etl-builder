@@ -95,11 +95,18 @@ jobs:
 
       - name: "[Deploy] 6. Démarrer le serveur Web DataForge en arrière-plan"
         run: |
+          if [ -f ".env" ]; then
+            set -a
+            source .env
+            set +a
+          fi
+          export DATAFORGE_DB_PASS="${DATAFORGE_DB_PASS:-DataForge_Internal_2024!}"
+          
           cd web
           # Utilisation de pm2 en priorité pour éviter de bloquer GitHub Actions
           if command -v pm2 &> /dev/null; then
             pm2 delete dataforge-web || true
-            pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python"
+            pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python" --update-env
             pm2 save
           else
             echo "pm2 introuvable, démarrage via nohup..."
