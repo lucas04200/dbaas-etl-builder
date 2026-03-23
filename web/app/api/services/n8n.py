@@ -3,12 +3,17 @@ DataForge — n8n instance router.
 """
 
 from fastapi import BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.core.database import cursor, get_db, next_port
-from app.api.deps import require_admin
+from app.api.deps import get_current_user, require_admin
 from app.api.services.provisioning import provision_n8n
 from app.api.services.base import ServiceConfig, create_service_crud
 from app.models import CreateN8nRequest
+
+
+class PgConnectionRequest(BaseModel):
+    pg_id: int
 
 router = create_service_crud(ServiceConfig(
     service_type="n8n",

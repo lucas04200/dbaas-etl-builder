@@ -268,6 +268,41 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+
+CREATE TABLE IF NOT EXISTS metabase_connections (
+    metabase_id INTEGER NOT NULL REFERENCES metabase_instances(id) ON DELETE CASCADE,
+    pg_id       INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (metabase_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS n8n_connections (
+    n8n_id     INTEGER NOT NULL REFERENCES n8n_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (n8n_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS mage_connections (
+    mage_id    INTEGER NOT NULL REFERENCES mage_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (mage_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS superset_connections (
+    superset_id INTEGER NOT NULL REFERENCES superset_instances(id) ON DELETE CASCADE,
+    pg_id       INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (superset_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS airflow_connections (
+    airflow_id INTEGER NOT NULL REFERENCES airflow_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (airflow_id, pg_id)
+);
 """
 
 _MIGRATIONS_SQL = """
@@ -281,6 +316,41 @@ ALTER TABLE postgres_instances ADD COLUMN IF NOT EXISTS internal_for_id INTEGER;
 DELETE FROM groups WHERE instance_type IS NULL AND name IN (
     'mage','metabase','n8n','minio','postgrest','redis',
     'airflow','clickhouse','ollama','superset','hasura','mariadb','qdrant'
+);
+
+CREATE TABLE IF NOT EXISTS metabase_connections (
+    metabase_id INTEGER NOT NULL REFERENCES metabase_instances(id) ON DELETE CASCADE,
+    pg_id       INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (metabase_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS n8n_connections (
+    n8n_id     INTEGER NOT NULL REFERENCES n8n_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (n8n_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS mage_connections (
+    mage_id    INTEGER NOT NULL REFERENCES mage_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (mage_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS superset_connections (
+    superset_id INTEGER NOT NULL REFERENCES superset_instances(id) ON DELETE CASCADE,
+    pg_id       INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (superset_id, pg_id)
+);
+
+CREATE TABLE IF NOT EXISTS airflow_connections (
+    airflow_id INTEGER NOT NULL REFERENCES airflow_instances(id) ON DELETE CASCADE,
+    pg_id      INTEGER NOT NULL REFERENCES postgres_instances(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (airflow_id, pg_id)
 );
 """
 
