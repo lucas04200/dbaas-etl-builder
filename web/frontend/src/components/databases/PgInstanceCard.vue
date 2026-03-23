@@ -20,8 +20,8 @@
       <router-link to="/catalog" class="btn btn-secondary btn-sm" title="Explorer dans le Catalog">
         Catalog →
       </router-link>
-      <button class="btn btn-primary btn-sm" @click="downloadBackup" :disabled="instance.status !== 'running'" title="Télécharger un Dump SQL">
-        Backup ⬇
+      <button class="btn btn-primary btn-sm" @click="backupToMinio" :disabled="instance.status !== 'running'" title="Archiver la base de données">
+        Backup (MinIO)
       </button>
       <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="$emit('delete', instance)">Supprimer</button>
     </div>
@@ -47,33 +47,38 @@ function statusLabel(s) {
 import { useToastStore } from '../../stores/toast.js'
 const toastStore = useToastStore()
 
-async function downloadBackup() {
+async function backupToMinio() {
   if (props.instance.status !== 'running') return
-  const toastId = toastStore.showToast("Génération du backup en cours...", false)
   try {
-    const res = await fetch(`/api/postgres/${props.instance.id}/databases/${props.instance.db_name}/backup`, {
-      headers: { Authorization: `Bearer ${authStore.token}` }
-    })
-    if (!res.ok) {
-      toastStore.showToast("Erreur lors du backup", true)
+    const minioRes = await fetch('/api/minio', { headers: { Authorization: `Bearer ${authStore.token}` } })
+    const minios = await minioRes.json()
+    if (!minios || minios.length === 0) {
+      toastStore.showToast("Aucune instance MinIO déployée. Installez MinIO depuis la bibliothèque.", true)
       return
     }
-    const filenameMatch = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)
-    const filename = filenameMatch ? filenameMatch[1] : 'backup.dump'
     
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
+    const minio_id = minios[0].id // Auto-select the first MinIO storage node
+    toastStore.showToast(`Transfert direct en cours vers ${minios[0].name} (S3)...`, false)
     
-    toastStore.showToast("Backup téléchargé avec succès !")
-  } catch (err) {
-    toastStore.showToast("Erreur lors du téléchargement", true)
+    const res = await fetch(`/api/postgres/${props.instance.id}/databases/${props.instance.db_name}/backup-minio`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${authStore.token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ minio_id: minio_id })
+    })
+    
+    if (!res.ok) {
+      const e = await res.json()
+      toastStore.showToast(e.detail || "Erreur lors du transfert", true)
+      return
+    }
+    
+    const data = await res.json()
+    toastStore.showToast(`Succès ! Archive stockée dans S3 : ${data.bucket}/${data.filename}`)
+  } catch(err) {
+    toastStore.showToast("Erreur réseau vers MinIO", true)
   }
 }
 </script>

@@ -306,41 +306,69 @@ def sample_rows(instance_id: int, db_name: str, table_name: str,
     finally:
         conn.close()
 
-from fastapi.responses import StreamingResponse
-import subprocess
-import datetime
+from pydantic import BaseModel
+from minio import Minio
 
-@router.get("/{instance_id}/databases/{db_name}/backup")
-def backup_database(instance_id: int, db_name: str, _: dict = Depends(require_admin), db=Depends(get_db)):
+class BackupMinioRequest(BaseModel):
+    minio_id: int
+
+@router.post("/{instance_id}/databases/{db_name}/backup-minio")
+def backup_database_minio(instance_id: int, db_name: str, body: BackupMinioRequest, _: dict = Depends(require_admin), db=Depends(get_db)):
+    from app.core.security import decrypt_secret
     inst = _get_pg_instance(instance_id, db)
     if inst["status"] != "running":
-        raise HTTPException(400, "L'instance n'est pas active.")
+        raise HTTPException(400, "L'instance PostgreSQL n'est pas active.")
         
+    with cursor(db) as cur:
+        cur.execute("SELECT * FROM minio_instances WHERE id = %s", (body.minio_id,))
+        minio_inst = cur.fetchone()
+        
+    if not minio_inst or minio_inst["status"] != "running":
+        raise HTTPException(400, "L'instance MinIO sélectionnée n'est pas active.")
+
     container_name = f"pg_{inst['name']}"
     if inst["is_internal"]:
         container_name = f"pg_internal_{inst['internal_for_type']}_{inst['name']}"
         
     cmd = [
-        "docker", "exec", "-i", container_name,
+        "docker", "exec", container_name,
         "pg_dump", "-U", inst["db_user"], "--format=custom", db_name
     ]
     
-    def stream_backup():
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            while True:
-                chunk = proc.stdout.read(8192)
-                if not chunk:
-                    break
-                yield chunk
-        finally:
-            proc.stdout.close()
-            proc.stderr.close()
-            proc.wait()
-            
-    filename = f"{inst['name']}_{db_name}_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
-    return StreamingResponse(
-        stream_backup(), 
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
+    try:
+        client = Minio(
+            f"localhost:{minio_inst['host_port']}",
+            access_key=minio_inst["root_user"],
+            secret_key=decrypt_secret(minio_inst["root_password"]),
+            secure=False
+        )
+        
+        bucket_name = "dataforge-backups"
+        if not client.bucket_exists(bucket_name):
+            client.make_bucket(bucket_name)
+    except Exception as e:
+        raise HTTPException(502, f"Erreur de connexion MinIO : {e}")
+        
+    filename = f"postgres/{inst['name']}/{db_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
+    
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        client.put_object(
+            bucket_name, 
+            filename, 
+            proc.stdout, 
+            length=-1, 
+            part_size=10*1024*1024
+        )
+    except Exception as e:
+        proc.kill()
+        raise HTTPException(500, f"Erreur MinIO: {str(e)}")
+    finally:
+        proc.stdout.close()
+        proc.stderr.close()
+        proc.wait()
+        
+    if proc.returncode != 0:
+        raise HTTPException(500, "Le processus pg_dump a échoué.")
+        
+    return {"ok": True, "filename": filename, "bucket": bucket_name, "minio": minio_inst["name"]}
