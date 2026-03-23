@@ -21,6 +21,7 @@ router = create_service_crud(ServiceConfig(
     prefix="/api/clickhouse",
     list_columns="id, name, host_port, status, created_at",
     order_by="ORDER BY created_at DESC",
+    volume_prefix="clickhouse_data",
 ))
 
 

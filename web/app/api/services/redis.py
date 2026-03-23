@@ -20,6 +20,7 @@ router = create_service_crud(ServiceConfig(
     container_prefix="redis",
     prefix="/api/redis",
     list_columns="id, name, host_port, status, created_at",
+    volume_prefix="redis_data",
 ))
 
 

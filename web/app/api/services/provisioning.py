@@ -25,11 +25,19 @@ async def run_ansible(playbook: str, extra_vars: dict) -> tuple[int, str]:
     return proc.returncode, (stdout + stderr).decode()
 
 
-async def docker_remove(container_name: str):
-    """Stop and remove a Docker container."""
+async def docker_remove(container_name: str, volume_names: list[str] | None = None):
+    """Stop and remove a Docker container, then optionally remove its volumes."""
     for sub in ["stop", "rm"]:
         proc = await asyncio.create_subprocess_exec(
             "docker", sub, container_name,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+
+    for vol in (volume_names or []):
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "volume", "rm", vol,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )

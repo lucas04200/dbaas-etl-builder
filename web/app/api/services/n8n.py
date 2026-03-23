@@ -16,6 +16,7 @@ router = create_service_crud(ServiceConfig(
     container_prefix="n8n",
     prefix="/api/n8n",
     list_columns="id, name, host_port, linked_pg_id, status, created_at",
+    volume_prefix="n8n_data",
 ))
 
 

@@ -40,6 +40,10 @@ class ServiceConfig:
     # Extra containers to remove on delete (relative to name)
     extra_containers: list[str] = field(default_factory=list)
 
+    # If set, docker volume rm {volume_prefix}_{name} is called on delete
+    # e.g. "redis_data" → deletes volume "redis_data_{name}"
+    volume_prefix: Optional[str] = None
+
 
 def create_service_crud(config: ServiceConfig) -> APIRouter:
     """
@@ -107,9 +111,12 @@ def create_service_crud(config: ServiceConfig) -> APIRouter:
                 )
                 internal_pg = cur.fetchone()
 
-            await docker_remove(f"{config.container_prefix}_{name}")
+            main_volumes = [f"{config.volume_prefix}_{name}"] if config.volume_prefix else []
+            await docker_remove(f"{config.container_prefix}_{name}", volume_names=main_volumes)
             if internal_pg:
-                await docker_remove(f"pg_{internal_pg['name']}")
+                await docker_remove(f"pg_{internal_pg['name']}",
+                                    volume_names=[f"pg_data_{internal_pg['name']}",
+                                                  f"pg_internal_metabase_{internal_pg['name']}"])
 
             for extra in config.extra_containers:
                 await docker_remove(f"{extra}_{name}")
@@ -142,7 +149,8 @@ def create_service_crud(config: ServiceConfig) -> APIRouter:
             if not row:
                 raise HTTPException(404, "Instance introuvable")
 
-            await docker_remove(f"{config.container_prefix}_{row['name']}")
+            volumes = [f"{config.volume_prefix}_{row['name']}"] if config.volume_prefix else []
+            await docker_remove(f"{config.container_prefix}_{row['name']}", volume_names=volumes)
 
             with cursor(db) as cur:
                 cur.execute(

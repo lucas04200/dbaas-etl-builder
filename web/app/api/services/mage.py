@@ -28,6 +28,7 @@ router = create_service_crud(ServiceConfig(
     ),
     list_alias="m",
     internal_pg_type="mage",
+    volume_prefix="mage_data",
 ))
 
 

@@ -31,6 +31,7 @@ router = create_service_crud(ServiceConfig(
     ),
     list_alias="h",
     order_by="ORDER BY h.created_at DESC",
+    volume_prefix="hasura_data",
 ))
 
 

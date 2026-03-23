@@ -23,6 +23,7 @@ router = create_service_crud(ServiceConfig(
     prefix="/api/mariadb",
     list_columns="id, name, host_port, db_name, status, created_at",
     order_by="ORDER BY created_at DESC",
+    volume_prefix="mariadb_data",
 ))
 
 

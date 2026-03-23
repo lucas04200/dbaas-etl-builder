@@ -124,7 +124,7 @@ async def delete_postgres(instance_id: int,
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, "Instance introuvable")
-    await docker_remove(f"pg_{row['name']}")
+    await docker_remove(f"pg_{row['name']}", volume_names=[f"pg_data_{row['name']}"])
     with cursor(db) as cur:
         cur.execute("DELETE FROM postgres_instances WHERE id = %s", (instance_id,))
     return {"ok": True}

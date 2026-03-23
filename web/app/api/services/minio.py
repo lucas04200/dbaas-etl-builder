@@ -19,6 +19,7 @@ router = create_service_crud(ServiceConfig(
     container_prefix="minio",
     prefix="/api/minio",
     list_columns="id, name, host_port, console_port, root_user, status, created_at",
+    volume_prefix="minio_data",
 ))
 
 

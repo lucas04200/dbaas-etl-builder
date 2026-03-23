@@ -24,6 +24,7 @@ router = create_service_crud(ServiceConfig(
     list_columns="id, name, host_port, status, created_at",
     order_by="ORDER BY created_at DESC",
     internal_pg_type="airflow",
+    volume_prefix="airflow_data",
 ))
 
 

@@ -20,6 +20,7 @@ router = create_service_crud(ServiceConfig(
     prefix="/api/metabase",
     list_columns="id, name, host_port, linked_pg_id, status, created_at",
     internal_pg_type="metabase",
+    volume_prefix="metabase_data",
 ))
 
 
