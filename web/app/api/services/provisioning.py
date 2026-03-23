@@ -26,22 +26,43 @@ async def run_ansible(playbook: str, extra_vars: dict) -> tuple[int, str]:
 
 
 async def docker_remove(container_name: str, volume_names: list[str] | None = None):
-    """Stop and remove a Docker container, then optionally remove its volumes."""
-    for sub in ["stop", "rm"]:
-        proc = await asyncio.create_subprocess_exec(
-            "docker", sub, container_name,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
+    """Kill and force-remove a Docker container, then optionally remove its volumes.
 
+    Uses 'docker kill' (SIGKILL) + 'docker rm --force' instead of 'docker stop' + 'docker rm'
+    to handle containers stuck in a zombie state after a Docker daemon restart.
+    In that state, 'docker stop' fails with 'permission denied' because it cannot
+    access invalidated cgroups. 'docker rm --force' bypasses this limitation.
+    """
+    # Step 1: Kill with SIGKILL — ignore errors (container may already be stopped/dead)
+    kill_proc = await asyncio.create_subprocess_exec(
+        "docker", "kill", container_name,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, kill_stderr = await kill_proc.communicate()
+    if kill_proc.returncode != 0 and kill_stderr:
+        logger.warning("docker kill %s: %s", container_name, kill_stderr.decode().strip())
+
+    # Step 2: Force-remove — succeeds even on zombie containers
+    rm_proc = await asyncio.create_subprocess_exec(
+        "docker", "rm", "--force", container_name,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, rm_stderr = await rm_proc.communicate()
+    if rm_proc.returncode != 0 and rm_stderr:
+        logger.error("docker rm --force %s: %s", container_name, rm_stderr.decode().strip())
+
+    # Step 3: Remove volumes
     for vol in (volume_names or []):
-        proc = await asyncio.create_subprocess_exec(
+        vol_proc = await asyncio.create_subprocess_exec(
             "docker", "volume", "rm", vol,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
-        await proc.wait()
+        _, vol_stderr = await vol_proc.communicate()
+        if vol_proc.returncode != 0 and vol_stderr:
+            logger.warning("docker volume rm %s: %s", vol, vol_stderr.decode().strip())
 
 
 def _update_status(table: str, instance_id: int, status: str,
