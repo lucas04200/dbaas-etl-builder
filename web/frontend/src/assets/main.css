@@ -78,7 +78,7 @@ body {
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-group label { font-size: 12px; font-weight: 600; color: #374151; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-input[type=text], input[type=password], select { padding: 8px 11px; border: 1.5px solid #E5E7EB; border-radius: 7px; font-size: 13px; color: var(--text-primary); outline: none; font-family: inherit; background: var(--white); transition: border-color 0.15s, box-shadow 0.15s; }
+input[type=text], input[type=password], input[type=email], select { padding: 8px 11px; border: 1.5px solid #E5E7EB; border-radius: 7px; font-size: 13px; color: var(--text-primary); outline: none; font-family: inherit; background: var(--white); transition: border-color 0.15s, box-shadow 0.15s; }
 input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(76,110,245,0.1); }
 select { cursor: pointer; }
 .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
@@ -94,10 +94,26 @@ tr:hover td { background: #FAFBFF; }
 .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .badge-admin        { background: #EEF2FF; color: var(--accent); }
 .badge-user         { background: #F3F4F6; color: #6B7280; }
+.badge-secondary    { background: #F3F4F6; color: #6B7280; }
 .badge-running      { background: #ECFDF5; color: var(--success); }
 .badge-provisioning { background: #FFF7ED; color: var(--warning); }
 .badge-error        { background: #FEF2F2; color: var(--error); }
 .badge-stopped      { background: #F3F4F6; color: #6B7280; }
+/* Instance type badges */
+.badge-type-postgres   { background: #EFF6FF; color: #2563EB; }
+.badge-type-n8n        { background: #F0FDF4; color: #16A34A; }
+.badge-type-mage       { background: #FFF7ED; color: #C2410C; }
+.badge-type-metabase   { background: #EEF2FF; color: #4F46E5; }
+.badge-type-redis      { background: #FEF2F2; color: #DC2626; }
+.badge-type-minio      { background: #F0FDF4; color: #15803D; }
+.badge-type-postgrest  { background: #FAF5FF; color: #7C3AED; }
+.badge-type-airflow    { background: #F0F9FF; color: #0284C7; }
+.badge-type-superset   { background: #FFF1F2; color: #BE123C; }
+.badge-type-hasura     { background: #F5F3FF; color: #7C3AED; }
+.badge-type-ollama     { background: #F8FAFC; color: #475569; }
+.badge-type-clickhouse { background: #FFFBEB; color: #B45309; }
+.badge-type-mariadb    { background: #EFF6FF; color: #1D4ED8; }
+.badge-type-qdrant     { background: #FFF0F0; color: #DC2626; }
 
 /* ── Instance cards ──────────────────────────────── */
 .instance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 8px; }

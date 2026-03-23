@@ -11,16 +11,29 @@ async function fetchWithAuth(url, opts = {}) {
 
 export { fetchWithAuth }
 
+// Setup
+export async function apiSetupStatus() {
+  return fetchWithAuth('/api/setup/status', { method: 'GET' })
+}
+
+export async function apiSetup(body) {
+  return fetchWithAuth('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+
 // Auth
+export async function apiRegister(body) {
+  return fetchWithAuth('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+
 export async function apiMe() {
   return fetchWithAuth('/api/me')
 }
 
-export async function apiLogin(username, password) {
+export async function apiLogin(email, password) {
   return fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email, password }),
   })
 }
 
@@ -301,6 +314,16 @@ export async function apiDeleteHasura(id) {
   return fetchWithAuth(`/api/hasura/${id}`, { method: 'DELETE' })
 }
 
+// Instances (all services)
+export async function apiGetInstances() {
+  return fetchWithAuth('/api/instances')
+}
+
+// Admin — Credentials
+export async function apiRevealCredentials(serviceType, instanceId) {
+  return fetchWithAuth(`/api/admin/instances/${serviceType}/${instanceId}/credentials`)
+}
+
 // Groups
 export async function apiGetGroups() {
   return fetchWithAuth('/api/groups')
@@ -322,11 +345,11 @@ export async function apiGetGroupMembers(groupId) {
   return fetchWithAuth(`/api/groups/${groupId}/members`)
 }
 
-export async function apiAddGroupMember(groupId, userId) {
+export async function apiAddGroupMember(groupId, userId, role) {
   return fetchWithAuth(`/api/groups/${groupId}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
+    body: JSON.stringify({ user_id: userId, role }),
   })
 }
 

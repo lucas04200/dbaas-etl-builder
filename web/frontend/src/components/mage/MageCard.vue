@@ -32,13 +32,33 @@
 import { computed } from 'vue'
 import { useAuthStore } from '../../stores/auth.js'
 
-defineProps({ instance: Object })
+const props = defineProps({ instance: Object })
 defineEmits(['delete'])
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.currentUser?.role === 'admin')
-
 function statusLabel(s) {
   return { running: 'Actif', provisioning: 'Déploiement…', error: 'Erreur', stopped: 'Arrêté' }[s] || s
 }
 </script>
+
+<style scoped>
+.mage-token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.mage-token-label { color: var(--color-text-muted, #888); white-space: nowrap; }
+.mage-token-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--color-bg-subtle, #f4f4f5);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+</style>

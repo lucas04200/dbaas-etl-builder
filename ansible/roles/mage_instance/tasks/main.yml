@@ -13,13 +13,8 @@
   set_fact:
     mage_env:
       MAGE_PROJECTS_FOLDER: "/home/src"
-
-- name: Ajout de la configuration PostgreSQL si une DB est liée
-  set_fact:
-    mage_env: "{{ mage_env | combine({
-      'MAGE_DATABASE_CONNECTION_URL': 'postgresql+psycopg2://' + linked_pg_user + ':' + linked_pg_password + '@' + linked_pg_host + ':5432/' + linked_pg_dbname
-    }) }}"
-  when: linked_pg_host is defined and linked_pg_host | length > 0
+      REQUIRE_USER_AUTHENTICATION: "0"
+      MAGE_DATABASE_CONNECTION_URL: "postgresql+psycopg2://{{ linked_pg_user }}:{{ linked_pg_password }}@{{ linked_pg_host }}:5432/{{ linked_pg_dbname }}"
 
 - name: Déploiement du conteneur Mage
   community.docker.docker_container:

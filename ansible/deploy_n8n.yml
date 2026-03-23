@@ -2,16 +2,14 @@
 - name: "Déploiement d'une instance ETL (n8n)"
   hosts: docker_hosts
   
-  # Ces variables peuvent être surchargées via --extra-vars lors de l'appel du playbook
+  # All variables MUST be provided via --extra-vars (from the DataForge backend)
   vars:
-    instance_name: "default_etl"
-    host_port: "5678"
-    
-    # Cible PostgreSQL pour la persistance interne de n8n
-    target_db_host: "pg_default"
-    target_db_name: "default_db"
-    target_db_user: "db_admin"
-    target_db_password: "SuperSecretPassword123!"
+    instance_name: "{{ instance_name }}"
+    host_port: "{{ host_port }}"
+    target_db_host: "{{ target_db_host | default('') }}"
+    target_db_name: "{{ target_db_name | default('') }}"
+    target_db_user: "{{ target_db_user | default('') }}"
+    target_db_password: "{{ target_db_password | default('') }}"
 
   roles:
     - role: n8n_instance

@@ -9,5 +9,7 @@ postgres_image: postgres:16-alpine      # Alpine: smaller attack surface, ~80 MB
 
 db_name:     dataforge
 db_user:     dataforge
-db_password: "DataForge_Internal_2024!"
+# Password is read from DATAFORGE_DB_PASS env var.
+# Fallback for dev only — in production, always set the env var.
+db_password: "{{ lookup('env', 'DATAFORGE_DB_PASS') | default('DataForge_Internal_2024!', true) }}"
 host_port:   5433                       # Different from default 5432 to avoid conflicts

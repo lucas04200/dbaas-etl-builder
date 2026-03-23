@@ -4,11 +4,7 @@
       <label>Nom de l'instance</label>
       <input type="text" v-model="form.name" placeholder="ex : cache-prod" style="width:100%">
     </div>
-    <div class="form-group" style="margin-bottom:6px">
-      <label>Mot de passe <span style="color:#9CA3AF;font-weight:400">(optionnel)</span></label>
-      <input type="text" v-model="form.password" placeholder="Laisser vide = sans authentification" style="width:100%">
-    </div>
-    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Redis sera accessible depuis le réseau Docker interne et sur localhost:port</p>
+    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Le mot de passe sera généré automatiquement. Redis sera accessible depuis le réseau Docker interne et sur localhost:port.</p>
     <div class="form-actions">
       <button class="btn btn-secondary" @click="open = false">Annuler</button>
       <button class="btn btn-primary" :disabled="loading" @click="submit">
@@ -16,11 +12,14 @@
       </button>
     </div>
   </BaseModal>
+
+  <CredentialRevealModal v-model="showCreds" :credentials="creds" :port="credsPort" />
 </template>
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import BaseModal from '../shared/BaseModal.vue'
+import CredentialRevealModal from '../shared/CredentialRevealModal.vue'
 import { apiCreateRedis } from '../../lib/api.js'
 import { useToastStore } from '../../stores/toast.js'
 
@@ -32,8 +31,11 @@ const open = ref(props.modelValue)
 watch(() => props.modelValue, v => open.value = v)
 watch(open, v => emit('update:modelValue', v))
 
-const form = reactive({ name: '', password: '' })
+const form = reactive({ name: '' })
 const loading = ref(false)
+const showCreds = ref(false)
+const creds = ref({})
+const credsPort = ref(null)
 
 async function submit() {
   if (!form.name) {
@@ -42,15 +44,15 @@ async function submit() {
   }
   loading.value = true
   try {
-    const body = {
-      name: form.name,
-      password: form.password || null,
-    }
-    const res = await apiCreateRedis(body)
+    const res = await apiCreateRedis({ name: form.name })
     if (res && res.ok) {
+      const data = await res.json()
       open.value = false
       toastStore.showToast('Instance Redis en cours de déploiement…')
-      form.name = ''; form.password = ''
+      creds.value = data.credentials || {}
+      credsPort.value = data.port
+      showCreds.value = true
+      form.name = ''
       emit('created')
     } else {
       const d = await res?.json().catch(() => ({}))

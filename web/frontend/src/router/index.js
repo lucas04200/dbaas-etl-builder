@@ -1,11 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
-import { apiMe } from '../lib/api.js'
+import { apiMe, apiSetupStatus } from '../lib/api.js'
 
 const routes = [
   {
     path: '/login',
     component: () => import('../views/LoginView.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/setup',
+    component: () => import('../views/SetupView.vue'),
     meta: { public: true },
   },
   {
@@ -46,6 +51,21 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  try {
+    const statusRes = await apiSetupStatus()
+    if (statusRes && statusRes.ok) {
+      const statusData = await statusRes.json()
+      if (statusData.needs_setup) {
+        if (to.path !== '/setup') return '/setup'
+        return true
+      }
+    }
+  } catch {
+    // If setup status check fails, continue normal flow
+  }
+
+  if (to.path === '/setup') return '/login'
+
   if (to.meta.public) return true
 
   const authStore = useAuthStore()
