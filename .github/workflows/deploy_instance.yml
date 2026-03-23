@@ -87,10 +87,6 @@ jobs:
           npm install -q
           npm run build
 
-      - name: "Syntax Check du playbook de déploiement web"
-        run: |
-          ansible-playbook --syntax-check ansible/deploy_web.yml
-
       - name: "[Deploy] 5. Installer les dépendances Python"
         run: |
           if [ ! -d "venv" ]; then
@@ -99,8 +95,35 @@ jobs:
           source venv/bin/activate
           pip install -r web/requirements.txt -q
 
-      - name: "[Deploy] 6. Déployer le serveur web et configurer le démarrage automatique (Ansible)"
+      - name: "[Deploy] 6. Démarrer le serveur web DataForge via PM2"
         run: |
-          cd ansible
-          ansible-playbook -i inventory.ini deploy_web.yml
+          # Charger les variables d'environnement
+          if [ -f ".env" ]; then
+            set -a
+            source .env
+            set +a
+          fi
+          export DATAFORGE_DB_PASS="${DATAFORGE_DB_PASS:-DataForge_Internal_2024!}"
+
+          # Construire les chemins dynamiquement depuis le workspace courant
+          WORKSPACE="$(pwd)"
+          VENV_PYTHON="$WORKSPACE/venv/bin/python"
+
+          # Redémarrer PM2 avec le bon interpréteur Python
+          cd "$WORKSPACE/web"
+          pm2 delete dataforge-web || true
+          pm2 start main.py --name dataforge-web --interpreter "$VENV_PYTHON" --update-env
+          pm2 save --force
+
+      - name: "[Deploy] 7. Configurer le démarrage automatique au reboot"
+        run: |
+          # Activer Docker au démarrage
+          sudo systemctl enable docker || true
+
+          # PM2 startup : capturer la commande générée et l'exécuter directement
+          PM2_CMD=$(pm2 startup systemd -u "$(whoami)" --hp "$HOME" 2>/dev/null | grep "^sudo ")
+          if [ -n "$PM2_CMD" ]; then
+            eval "$PM2_CMD"
+          fi
+          pm2 save --force
 
