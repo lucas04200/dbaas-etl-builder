@@ -37,6 +37,7 @@ from app.api.services.superset import router as superset_router
 from app.api.services.airflow import router as airflow_router
 from app.api.services.hasura import router as hasura_router
 from app.api.services.library import router as library_router
+from app.api.services.architecture import router as architecture_router
 
 
 @asynccontextmanager
@@ -86,6 +87,7 @@ app.include_router(superset_router)
 app.include_router(airflow_router)
 app.include_router(hasura_router)
 app.include_router(library_router)
+app.include_router(architecture_router)
 
 
 # ── Root redirect ────────────────────────────────────────────────────────────

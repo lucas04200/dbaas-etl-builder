@@ -36,6 +36,7 @@ const routes = [
       { path: 'superset',   component: () => import('../views/SupersetView.vue') },
       { path: 'airflow',    component: () => import('../views/AirflowView.vue') },
       { path: 'hasura',     component: () => import('../views/HasuraView.vue') },
+      { path: 'architecture', component: () => import('../views/ArchitectureView.vue') },
       {
         path: 'security',
         component: () => import('../views/SecurityView.vue'),

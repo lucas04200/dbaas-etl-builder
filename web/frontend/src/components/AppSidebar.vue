@@ -32,6 +32,15 @@
         </svg>
         Bibliothèque
       </router-link>
+      <router-link to="/architecture" class="nav-item" :class="{ active: route.path === '/architecture' }">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <circle cx="3" cy="7.5" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <circle cx="12" cy="4" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <circle cx="12" cy="11" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M4.5 7L10.5 4.5M4.5 8L10.5 10.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        Architecture
+      </router-link>
     </div>
 
     <!-- Services actifs (filtrés depuis la bibliothèque) -->
