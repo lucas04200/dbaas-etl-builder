@@ -22,6 +22,8 @@ jobs:
       - name: Syntax Check des Playbooks
         run: |
           ansible-playbook --syntax-check ansible/deploy_dataforge_db.yml
+          ansible-playbook --syntax-check ansible/deploy_web.yml
+
 
   deploy:
     name: Déploiement Complet sur NAS / VM Privée
@@ -85,6 +87,10 @@ jobs:
           npm install -q
           npm run build
 
+      - name: "Syntax Check du playbook de déploiement web"
+        run: |
+          ansible-playbook --syntax-check ansible/deploy_web.yml
+
       - name: "[Deploy] 5. Installer les dépendances Python"
         run: |
           if [ ! -d "venv" ]; then
@@ -93,25 +99,8 @@ jobs:
           source venv/bin/activate
           pip install -r web/requirements.txt -q
 
-      - name: "[Deploy] 6. Démarrer le serveur Web DataForge en arrière-plan"
+      - name: "[Deploy] 6. Déployer le serveur web et configurer le démarrage automatique (Ansible)"
         run: |
-          if [ -f ".env" ]; then
-            set -a
-            source .env
-            set +a
-          fi
-          export DATAFORGE_DB_PASS="${DATAFORGE_DB_PASS:-DataForge_Internal_2024!}"
-          
-          # Force installation of PM2 globally to prevent GitHub Actions from killing the background python process
-          if ! command -v pm2 &> /dev/null; then
-             echo "PM2 not found, installing via npm..."
-             sudo npm install -g pm2 || npm install -g pm2
-          fi
-          
-          cd web
-          pm2 delete dataforge-web || true
-          pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python" --update-env
-          pm2 save
-          
-          # Install PM2 startup script automatically if strictly needed (silent fail if no sudo permission)
-          sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $(whoami) --hp $HOME || true
+          cd ansible
+          ansible-playbook -i inventory.ini deploy_web.yml
+

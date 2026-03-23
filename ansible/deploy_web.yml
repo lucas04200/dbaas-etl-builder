@@ -1,0 +1,58 @@
+---
+- name: "Déployer le serveur web DataForge et configurer le démarrage automatique"
+  hosts: docker_hosts
+  become: yes
+  vars:
+    app_dir: "{{ ansible_env.HOME | default('/root') }}/actions-runner/_work/dbaas-etl-builder/dbaas-etl-builder"
+    web_dir: "{{ app_dir }}/web"
+    venv_python: "{{ app_dir }}/venv/bin/python"
+    pm2_bin: /usr/lib/node_modules/pm2/bin/pm2
+    runner_user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+
+  tasks:
+    - name: S'assurer que Docker démarre automatiquement au reboot
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Charger les variables d'environnement depuis .env
+      shell: |
+        set -a
+        [ -f "{{ app_dir }}/.env" ] && source "{{ app_dir }}/.env"
+        set +a
+        echo "$DATAFORGE_MASTER_KEY"
+      register: master_key_check
+      changed_when: false
+      become: no
+
+    - name: Démarrer ou redémarrer DataForge via PM2
+      shell: |
+        export PATH=$PATH:/usr/bin:/usr/local/bin
+        set -a
+        [ -f "{{ app_dir }}/.env" ] && source "{{ app_dir }}/.env"
+        set +a
+        export DATAFORGE_DB_PASS="${DATAFORGE_DB_PASS:-DataForge_Internal_2024!}"
+        cd "{{ web_dir }}"
+        {{ pm2_bin }} delete dataforge-web || true
+        {{ pm2_bin }} start main.py --name dataforge-web --interpreter "{{ venv_python }}" --update-env
+        {{ pm2_bin }} save --force
+      become: no
+
+    - name: Configurer PM2 pour démarrer automatiquement au reboot (via systemd)
+      shell: |
+        export PATH=$PATH:/usr/bin:/usr/local/bin
+        {{ pm2_bin }} startup systemd -u {{ runner_user }} --hp {{ ansible_env.HOME | default('/root') }}
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/bin:/usr/local/bin"
+      register: pm2_startup_output
+      changed_when: "'already been set up' not in pm2_startup_output.stdout"
+
+    - name: Activer le service PM2 systemd
+      systemd:
+        name: "pm2-{{ runner_user }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      ignore_errors: yes
