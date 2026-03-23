@@ -1,0 +1,36 @@
+---
+- name: Installer les pre-requis systeme sur le serveur
+  hosts: docker_hosts
+  become: yes
+  tasks:
+    - name: Ensure APT cache is updated
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installer les utilitaires de base (curl, git, pip, venv)
+      apt:
+        name:
+          - curl
+          - git
+          - python3
+          - python3-pip
+          - python3-venv
+          - python3-xyz
+        state: present
+
+    - name: Ajouter le repository NodeSource (pour Node.js 20)
+      shell: "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+      args:
+        creates: "/etc/apt/sources.list.d/nodesource.list"
+
+    - name: Installer Node.js et npm
+      apt:
+        name: nodejs
+        state: present
+
+    - name: Installer pm2 globalement pour la gestion des processus
+      npm:
+        name: pm2
+        global: yes
+        state: present

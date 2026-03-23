@@ -41,7 +41,8 @@ fi
 # ── 1. Deploy internal database via Ansible ───────────────────────────────────
 echo "==> [1/4] Deploiement de la base de donnees interne (Ansible)..."
 cd "$SCRIPT_DIR/ansible"
-ansible-playbook deploy_dataforge_db.yml
+export ANSIBLE_CONFIG="ansible.cfg"
+ansible-playbook -i inventory.ini deploy_dataforge_db.yml
 cd "$SCRIPT_DIR"
 
 # ── 2. Wait for PostgreSQL to accept connections ───────────────────────────────
@@ -69,6 +70,10 @@ cd "$SCRIPT_DIR"
 
 # ── 4. Install Python deps & start web server ─────────────────────────────────
 echo "==> [4/4] Demarrage du serveur web DataForge..."
+if [ ! -d "$SCRIPT_DIR/venv" ]; then
+    python3 -m venv "$SCRIPT_DIR/venv"
+fi
+source "$SCRIPT_DIR/venv/bin/activate"
 pip install -r "$SCRIPT_DIR/web/requirements.txt" -q
 
 echo ""

@@ -21,8 +21,7 @@ jobs:
 
       - name: Syntax Check des Playbooks
         run: |
-          ansible-playbook --syntax-check ansible/deploy_postgres.yml
-          ansible-playbook --syntax-check ansible/deploy_n8n.yml
+          ansible-playbook --syntax-check ansible/deploy_dataforge_db.yml
 
   deploy:
     name: Déploiement Complet sur NAS / VM Privée
@@ -35,21 +34,71 @@ jobs:
       - name: Installer la dépendance Docker pour Ansible (Si manquante)
         run: ansible-galaxy collection install community.docker
 
-      - name: "[Provisioning] 1. Déployer la Database PostgreSQL"
+      - name: "[Provisioning] 0. Installer les prérequis système (Ansible)"
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy_postgres.yml \
-            -e "instance_name=testenv \
-                db_name=db_testenv \
-                db_user=admin_testenv \
-                db_password=SecureTestPass1! \
-                host_port=5432"
+          cd ansible
+          ansible-playbook -i inventory.ini deploy_prerequisites.yml || echo "Installation des prérequis via Ansible terminée (ou ignorée sans sudo)."
 
-      - name: "[Provisioning] 2. Déployer l'ETL n8n lié à la base"
+      - name: "[Provisioning] 1. Générer le master key (Si absente)"
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy_n8n.yml \
-            -e "instance_name=testenv \
-                host_port=5678 \
-                target_db_host=pg_testenv \
-                target_db_name=db_testenv \
-                target_db_user=admin_testenv \
-                target_db_password=SecureTestPass1!"
+          if [ ! -f ".env" ]; then
+            touch .env
+          fi
+          if ! grep -q "DATAFORGE_MASTER_KEY" .env; then
+            export DATAFORGE_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || echo "")
+            if [ -z "$DATAFORGE_MASTER_KEY" ]; then
+                pip install -q cryptography 2>/dev/null || pip3 install -q cryptography --break-system-packages
+                export DATAFORGE_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+            fi
+            echo "DATAFORGE_MASTER_KEY='$DATAFORGE_MASTER_KEY'" >> .env
+            echo "Nouvelle DATAFORGE_MASTER_KEY générée dans .env"
+          fi
+
+      - name: "[Provisioning] 2. Déployer la base de données interne (Ansible)"
+        run: |
+          cd ansible
+          ansible-playbook -i inventory.ini deploy_dataforge_db.yml
+
+      - name: "[Provisioning] 3. Attendre le démarrage de PostgreSQL"
+        run: |
+          MAX_RETRIES=20
+          COUNT=0
+          until docker exec dataforge_internal_db pg_isready -U dataforge -d dataforge -q 2>/dev/null; do
+              COUNT=$((COUNT + 1))
+              if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
+                  echo "x PostgreSQL n'a pas démarré dans les temps. Vérifiez le conteneur."
+                  exit 1
+              fi
+              echo "Tentative $COUNT/$MAX_RETRIES..."
+              sleep 2
+          done
+          echo "v PostgreSQL prêt"
+
+      - name: "[Build] 4. Build du frontend Vue"
+        run: |
+          cd web/frontend
+          npm install -q
+          npm run build
+
+      - name: "[Deploy] 5. Installer les dépendances Python"
+        run: |
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+          source venv/bin/activate
+          pip install -r web/requirements.txt -q
+
+      - name: "[Deploy] 6. Démarrer le serveur Web DataForge en arrière-plan"
+        run: |
+          cd web
+          # Utilisation de pm2 en priorité pour éviter de bloquer GitHub Actions
+          if command -v pm2 &> /dev/null; then
+            pm2 restart dataforge-web || pm2 start main.py --name dataforge-web --interpreter ../venv/bin/python
+            pm2 save
+          else
+            echo "pm2 introuvable, démarrage via nohup..."
+            # On cherche s'il y a déjà un processus pour le tuer
+            pkill -f "python main.py" || true
+            nohup ../venv/bin/python main.py > ../dataforge_web.log 2>&1 &
+            echo "Application lancée en arrière-plan."
+          fi
