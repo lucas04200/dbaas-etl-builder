@@ -8,7 +8,7 @@ import psycopg2
 from fastapi import BackgroundTasks, Depends, HTTPException
 
 from app.core.database import cursor, get_db, next_port
-from app.core.security import encrypt_secret
+from app.core.security import encrypt_secret, decrypt_secret
 from app.api.deps import require_admin
 from app.api.services.provisioning import provision_mariadb
 from app.api.services.base import ServiceConfig, create_service_crud
@@ -58,3 +58,46 @@ def create_mariadb(
             "root_password": plain_password, "db_name": resolved_db_name,
         },
     }
+
+from fastapi.responses import StreamingResponse
+import subprocess
+import datetime
+
+@router.get("/{instance_id}/backup")
+def backup_mariadb(instance_id: int, _: dict = Depends(require_admin), db=Depends(get_db)):
+    with cursor(db) as cur:
+        cur.execute("SELECT * FROM mariadb_instances WHERE id = %s", (instance_id,))
+        inst = cur.fetchone()
+    if not inst:
+        raise HTTPException(404, "Instance introuvable")
+    if inst["status"] != "running":
+        raise HTTPException(400, "L'instance n'est pas active.")
+        
+    container_name = f"mariadb_{inst['name']}"
+    
+    cmd = [
+        "docker", "exec", "-i", container_name,
+        "mysqldump", "-u", "root", f"-p{decrypt_secret(inst['root_password'])}", 
+        inst['db_name'] if inst['db_name'] else inst['name']
+    ]
+    
+    def stream_backup():
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            while True:
+                chunk = proc.stdout.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            proc.stdout.close()
+            proc.stderr.close()
+            proc.wait()
+            
+    db_name = inst['db_name'] if inst['db_name'] else inst['name']
+    filename = f"mariadb_{inst['name']}_{db_name}_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+    return StreamingResponse(
+        stream_backup(), 
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )

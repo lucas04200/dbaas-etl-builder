@@ -305,3 +305,42 @@ def sample_rows(instance_id: int, db_name: str, table_name: str,
         raise HTTPException(500, "Erreur serveur")
     finally:
         conn.close()
+
+from fastapi.responses import StreamingResponse
+import subprocess
+import datetime
+
+@router.get("/{instance_id}/databases/{db_name}/backup")
+def backup_database(instance_id: int, db_name: str, _: dict = Depends(require_admin), db=Depends(get_db)):
+    inst = _get_pg_instance(instance_id, db)
+    if inst["status"] != "running":
+        raise HTTPException(400, "L'instance n'est pas active.")
+        
+    container_name = f"pg_{inst['name']}"
+    if inst["is_internal"]:
+        container_name = f"pg_internal_{inst['internal_for_type']}_{inst['name']}"
+        
+    cmd = [
+        "docker", "exec", "-i", container_name,
+        "pg_dump", "-U", inst["db_user"], "--format=custom", db_name
+    ]
+    
+    def stream_backup():
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            while True:
+                chunk = proc.stdout.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            proc.stdout.close()
+            proc.stderr.close()
+            proc.wait()
+            
+    filename = f"{inst['name']}_{db_name}_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
+    return StreamingResponse(
+        stream_backup(), 
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
