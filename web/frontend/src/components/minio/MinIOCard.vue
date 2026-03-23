@@ -19,7 +19,7 @@
     <div class="instance-card-actions">
       <a
         class="btn btn-primary btn-sm"
-        :href="`http://localhost:${instance.host_port}`"
+        :href="`http://${hostname}:${instance.host_port}`"
         target="_blank"
         :style="instance.status !== 'running' ? 'pointer-events:none;opacity:.5' : ''"
       >
@@ -27,7 +27,7 @@
       </a>
       <a
         class="btn btn-secondary btn-sm"
-        :href="`http://localhost:${instance.console_port}`"
+        :href="`http://${hostname}:${instance.console_port}`"
         target="_blank"
         :style="instance.status !== 'running' ? 'pointer-events:none;opacity:.5' : ''"
       >
@@ -39,6 +39,7 @@
 </template>
 
 <script setup>
+const hostname = window.location.hostname;
 import { computed } from 'vue'
 import { useAuthStore } from '../../stores/auth.js'
 

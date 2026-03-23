@@ -16,7 +16,7 @@
     </div>
     <div class="instance-card-actions">
       <code style="font-size:12px;color:#6B7280;background:#F3F4F6;padding:4px 8px;border-radius:6px;flex:1">
-        http://localhost:{{ instance.host_port }} (X-Hasura-Admin-Secret: &lt;secret&gt;)
+        http://{{ hostname }}:{{ instance.host_port }} (X-Hasura-Admin-Secret: &lt;secret&gt;)
       </code>
       <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="$emit('delete', instance)">Supprimer</button>
     </div>
@@ -24,6 +24,7 @@
 </template>
 
 <script setup>
+const hostname = window.location.hostname;
 import { computed } from 'vue'
 import { useAuthStore } from '../../stores/auth.js'
 

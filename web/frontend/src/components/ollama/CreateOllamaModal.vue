@@ -4,7 +4,7 @@
       <label>Nom de l'instance</label>
       <input type="text" v-model="form.name" placeholder="ex : llm-local" style="width:100%">
     </div>
-    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Ollama vous permet d'exécuter des LLMs en local. Accessible sur localhost:port après déploiement.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Ollama vous permet d'exécuter des LLMs en local. Accessible sur IP:port après déploiement.</p>
     <div class="form-actions">
       <button class="btn btn-secondary" @click="open = false">Annuler</button>
       <button class="btn btn-primary" :disabled="loading" @click="submit">

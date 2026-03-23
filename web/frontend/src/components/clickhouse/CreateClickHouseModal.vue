@@ -4,7 +4,7 @@
       <label>Nom de l'instance</label>
       <input type="text" v-model="form.name" placeholder="ex : analytics-prod" style="width:100%">
     </div>
-    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Le mot de passe sera généré automatiquement. ClickHouse sera accessible depuis le réseau Docker interne et sur localhost:port.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin-bottom:20px">Le mot de passe sera généré automatiquement. ClickHouse sera accessible depuis le réseau Docker interne et sur IP:port.</p>
     <div class="form-actions">
       <button class="btn btn-secondary" @click="open = false">Annuler</button>
       <button class="btn btn-primary" :disabled="loading" @click="submit">

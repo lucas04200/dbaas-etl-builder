@@ -14,7 +14,7 @@
         <div>
           <div class="ollama-name">{{ instance.name }}</div>
           <div class="ollama-meta">
-            <code>http://localhost:{{ instance.host_port }}</code>
+            <code>http://{{ hostname }}:{{ instance.host_port }}</code>
           </div>
         </div>
       </div>
@@ -98,11 +98,11 @@
       <!-- Integration info -->
       <div class="integration-block">
         <div class="integration-title">Utilisation de l'API</div>
-        <code class="integration-code">curl http://localhost:{{ instance.host_port }}/api/generate \
+        <code class="integration-code">curl http://{{ hostname }}:{{ instance.host_port }}/api/generate \
   -d '{"model":"llama3.2:3b","prompt":"Bonjour","stream":false}'</code>
         <div class="integration-title" style="margin-top:8px">Compatible OpenAI SDK</div>
         <code class="integration-code">from openai import OpenAI
-client = OpenAI(base_url="http://localhost:{{ instance.host_port }}/v1", api_key="ollama")
+client = OpenAI(base_url="http://{{ hostname }}:{{ instance.host_port }}/v1", api_key="ollama")
 r = client.chat.completions.create(model="llama3.2:3b", messages=[...])</code>
       </div>
     </template>
@@ -118,6 +118,7 @@ r = client.chat.completions.create(model="llama3.2:3b", messages=[...])</code>
 </template>
 
 <script setup>
+const hostname = window.location.hostname;
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth.js'
 import { useToastStore } from '../../stores/toast.js'

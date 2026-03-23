@@ -18,7 +18,7 @@
     </div>
     <div class="instance-card-actions">
       <code style="font-size:12px;color:#6B7280;background:#F3F4F6;padding:4px 8px;border-radius:6px;flex:1">
-        mysql://root:&lt;pass&gt;@localhost:{{ instance.host_port }}/{{ instance.db_name || instance.name }}
+        mysql://root:&lt;pass&gt;@{{ hostname }}:{{ instance.host_port }}/{{ instance.db_name || instance.name }}
       </code>
       <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="$emit('delete', instance)">Supprimer</button>
     </div>
@@ -26,6 +26,7 @@
 </template>
 
 <script setup>
+const hostname = window.location.hostname;
 import { computed } from 'vue'
 import { useAuthStore } from '../../stores/auth.js'
 
