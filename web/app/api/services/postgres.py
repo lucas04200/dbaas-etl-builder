@@ -308,8 +308,95 @@ def sample_rows(instance_id: int, db_name: str, table_name: str,
     finally:
         conn.close()
 
+import os
+from pathlib import Path
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from minio import Minio
+
+BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/app/backups"))
+
+
+# ── Backup / Restore ─────────────────────────────────────────────────────────
+
+
+class BackupRequest(BaseModel):
+    database: str = "postgres"
+
+
+@router.post("/{instance_id}/backup")
+def backup_postgres(instance_id: int, body: BackupRequest,
+                    _: dict = Depends(require_admin), db=Depends(get_db)):
+    """pg_dump vers un fichier local — téléchargeable depuis l'UI."""
+    inst = _get_pg_instance(instance_id, db)
+    if inst["status"] != "running":
+        raise HTTPException(400, "Instance non démarrée")
+
+    backup_dir = BACKUP_DIR / inst["name"]
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{body.database}_{timestamp}.dump"
+    filepath = backup_dir / filename
+
+    container = f"pg_{inst['name']}"
+    cmd = [
+        "docker", "exec", container,
+        "pg_dump", "-U", inst["db_user"], "--format=custom", body.database,
+    ]
+    try:
+        with open(filepath, "wb") as f:
+            res = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, timeout=300)
+        if res.returncode != 0:
+            filepath.unlink(missing_ok=True)
+            raise HTTPException(500, f"pg_dump échoué : {res.stderr.decode()}")
+    except subprocess.TimeoutExpired:
+        filepath.unlink(missing_ok=True)
+        raise HTTPException(504, "Timeout lors du backup")
+
+    size = filepath.stat().st_size
+    return {"ok": True, "filename": filename, "size": size}
+
+
+@router.get("/{instance_id}/backups")
+def list_backups(instance_id: int, _: dict = Depends(require_admin), db=Depends(get_db)):
+    inst = _get_pg_instance(instance_id, db)
+    backup_dir = BACKUP_DIR / inst["name"]
+    if not backup_dir.exists():
+        return []
+    files = sorted(backup_dir.glob("*.dump"), key=lambda f: f.stat().st_mtime, reverse=True)
+    return [
+        {"filename": f.name, "size": f.stat().st_size,
+         "created_at": datetime.datetime.fromtimestamp(f.stat().st_mtime).isoformat()}
+        for f in files
+    ]
+
+
+@router.get("/{instance_id}/backups/{filename}")
+def download_backup(instance_id: int, filename: str,
+                    _: dict = Depends(require_admin), db=Depends(get_db)):
+    inst = _get_pg_instance(instance_id, db)
+    # Sécurité : pas de path traversal
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "Nom de fichier invalide")
+    filepath = BACKUP_DIR / inst["name"] / filename
+    if not filepath.exists():
+        raise HTTPException(404, "Fichier introuvable")
+    return FileResponse(str(filepath), filename=filename,
+                        media_type="application/octet-stream")
+
+
+@router.delete("/{instance_id}/backups/{filename}")
+def delete_backup(instance_id: int, filename: str,
+                  _: dict = Depends(require_admin), db=Depends(get_db)):
+    inst = _get_pg_instance(instance_id, db)
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "Nom de fichier invalide")
+    filepath = BACKUP_DIR / inst["name"] / filename
+    if not filepath.exists():
+        raise HTTPException(404, "Fichier introuvable")
+    filepath.unlink()
+    return {"ok": True}
 
 class BackupMinioRequest(BaseModel):
     minio_id: int

@@ -372,3 +372,26 @@ export async function apiAddGroupPermission(groupId, body) {
 export async function apiRemoveGroupPermission(groupId, permId) {
   return fetchWithAuth(`/api/groups/${groupId}/permissions/${permId}`, { method: 'DELETE' })
 }
+
+// Monitoring
+export async function apiSyncStatuses() {
+  return fetchWithAuth('/api/monitoring/sync', { method: 'POST' })
+}
+export async function apiGetContainerLogs(containerName, tail = 200) {
+  return fetchWithAuth(`/api/monitoring/logs/${containerName}?tail=${tail}`)
+}
+
+// Backup PostgreSQL
+export async function apiPgBackup(instanceId, database) {
+  return fetchWithAuth(`/api/postgres/${instanceId}/backup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ database }),
+  })
+}
+export async function apiPgListBackups(instanceId) {
+  return fetchWithAuth(`/api/postgres/${instanceId}/backups`)
+}
+export async function apiPgDeleteBackup(instanceId, filename) {
+  return fetchWithAuth(`/api/postgres/${instanceId}/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+}

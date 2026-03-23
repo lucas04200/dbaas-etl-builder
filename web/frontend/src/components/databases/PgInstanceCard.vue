@@ -17,25 +17,37 @@
       <span :class="['badge', 'badge-' + instance.status]">{{ statusLabel(instance.status) }}</span>
     </div>
     <div class="instance-card-actions">
-      <router-link to="/catalog" class="btn btn-secondary btn-sm" title="Explorer dans le Catalog">
-        Catalog →
-      </router-link>
-      <button class="btn btn-primary btn-sm" @click="backupToMinio" :disabled="instance.status !== 'running'" title="Archiver la base de données">
-        Backup (MinIO)
+      <router-link to="/catalog" class="btn btn-secondary btn-sm">Catalog →</router-link>
+      <button
+        v-if="isAdmin"
+        class="btn btn-secondary btn-sm"
+        :disabled="instance.status !== 'running'"
+        @click="showBackup = true"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 2v6M3 6l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1 10h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        Sauvegardes
       </button>
       <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="$emit('delete', instance)">Supprimer</button>
     </div>
   </div>
+
+  <BackupModal v-if="showBackup" :instance="instance" @close="showBackup = false" />
 </template>
 
 <script setup>
 import { useAuthStore } from '../../stores/auth.js'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import BackupModal from './BackupModal.vue'
 
 const props = defineProps({
   instance: Object,
 })
 defineEmits(['delete'])
+
+const showBackup = ref(false)
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.currentUser?.role === 'admin')
