@@ -1,0 +1,27 @@
+---
+- name: "Déploiement d'une instance Superset avec base interne automatique"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_superset"
+    host_port: "8088"
+    admin_password: ""
+    internal_pg_password: ""
+    internal_pg_host_port: "15500"
+    superset_secret_key: ""
+
+  tasks:
+    - name: Provisionnement de la base PostgreSQL interne pour Superset
+      include_role:
+        name: internal_pg
+      vars:
+        service_type: "superset"
+        internal_pg_container: "pg_internal_superset_{{ instance_name }}"
+        internal_pg_volume: "pg_internal_superset_data_{{ instance_name }}"
+        internal_pg_user: "superset"
+        internal_pg_dbname: "superset"
+        internal_pg_host_port: "{{ internal_pg_host_port }}"
+
+    - name: Déploiement de l'instance Superset
+      include_role:
+        name: superset_instance

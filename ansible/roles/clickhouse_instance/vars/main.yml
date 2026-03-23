@@ -1,0 +1,6 @@
+---
+network_name: "data_forge_network_01"
+clickhouse_image: "clickhouse/clickhouse-server:latest"
+clickhouse_container_name: "clickhouse_{{ instance_name }}"
+clickhouse_volume_name: "clickhouse_data_{{ instance_name }}"
+clickhouse_password: ""

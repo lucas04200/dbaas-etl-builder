@@ -1,0 +1,23 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Déploiement du conteneur PostgREST
+  community.docker.docker_container:
+    name: "{{ postgrest_container_name }}"
+    image: "{{ postgrest_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    published_ports:
+      - "{{ host_port }}:3000"
+    env:
+      PGRST_DB_URI: "postgres://{{ pg_user }}:{{ pg_password }}@{{ pg_host }}:5432/{{ pg_dbname }}"
+      PGRST_DB_SCHEMA: "{{ db_schema }}"
+      PGRST_DB_ANON_ROLE: "{{ pg_user }}"
+      PGRST_SERVER_PORT: "3000"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

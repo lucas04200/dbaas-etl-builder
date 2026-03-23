@@ -1,0 +1,6 @@
+---
+network_name: "data_forge_network_01"
+superset_image: "apache/superset:latest"
+superset_container_name: "superset_{{ instance_name }}"
+superset_volume_name: "superset_data_{{ instance_name }}"
+admin_password: ""

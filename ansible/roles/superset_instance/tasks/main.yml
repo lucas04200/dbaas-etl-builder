@@ -1,0 +1,60 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Superset
+  community.docker.docker_volume:
+    name: "{{ superset_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur Superset
+  community.docker.docker_container:
+    name: "{{ superset_container_name }}"
+    image: "{{ superset_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ superset_volume_name }}:/app/superset_home"
+    published_ports:
+      - "{{ host_port }}:8088"
+    env:
+      DATABASE_URL: "postgresql://superset:{{ internal_pg_password }}@pg_internal_superset_{{ instance_name }}:5432/superset"
+      SECRET_KEY: "{{ superset_secret_key }}"
+      SUPERSET_LOAD_EXAMPLES: "no"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
+
+- name: Attendre que Superset soit prêt
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Initialisation de la base de données Superset
+  ansible.builtin.command: >
+    docker exec {{ superset_container_name }}
+    superset db upgrade
+  register: db_upgrade
+  retries: 5
+  delay: 5
+  until: db_upgrade.rc == 0
+  changed_when: true
+
+- name: Création de l'administrateur Superset
+  ansible.builtin.command: >
+    docker exec {{ superset_container_name }}
+    superset fab create-admin
+    --username admin
+    --firstname Admin
+    --lastname User
+    --email admin@superset.local
+    --password {{ admin_password }}
+  changed_when: true
+
+- name: Initialisation de Superset
+  ansible.builtin.command: >
+    docker exec {{ superset_container_name }}
+    superset init
+  changed_when: true

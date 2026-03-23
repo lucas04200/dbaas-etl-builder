@@ -1,0 +1,32 @@
+---
+- name: "Déploiement d'une instance Mage.ai avec base interne automatique"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_mage"
+    host_port: "6789"
+    internal_pg_password: ""
+    internal_pg_host_port: "15200"
+    mage_email: ""
+    mage_access_token: ""
+
+  tasks:
+    - name: Provisionnement de la base PostgreSQL interne pour Mage
+      include_role:
+        name: internal_pg
+      vars:
+        service_type: "mage"
+        internal_pg_container: "pg_internal_mage_{{ instance_name }}"
+        internal_pg_volume: "pg_internal_mage_data_{{ instance_name }}"
+        internal_pg_user: "mage"
+        internal_pg_dbname: "mage"
+        internal_pg_host_port: "{{ internal_pg_host_port }}"
+
+    - name: Déploiement de l'instance Mage.ai
+      include_role:
+        name: mage_instance
+      vars:
+        linked_pg_host: "pg_internal_mage_{{ instance_name }}"
+        linked_pg_dbname: "mage"
+        linked_pg_user: "mage"
+        linked_pg_password: "{{ internal_pg_password }}"

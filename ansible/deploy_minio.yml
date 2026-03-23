@@ -1,0 +1,14 @@
+---
+- name: "Déploiement d'une instance MinIO (stockage objet S3)"
+  hosts: docker_hosts
+
+  # All variables MUST be provided via --extra-vars (from the DataForge backend)
+  vars:
+    instance_name: "{{ instance_name }}"
+    host_port: "{{ host_port }}"
+    console_port: "{{ console_port }}"
+    minio_root_user: "{{ minio_root_user }}"
+    minio_root_password: "{{ minio_root_password }}"
+
+  roles:
+    - role: minio_instance

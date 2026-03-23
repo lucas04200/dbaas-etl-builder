@@ -1,0 +1,15 @@
+---
+- name: "Déploiement d'une instance Hasura"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_hasura"
+    host_port: "8280"
+    admin_secret: ""
+    linked_pg_host: ""
+    linked_pg_dbname: ""
+    linked_pg_user: ""
+    linked_pg_password: ""
+
+  roles:
+    - role: hasura_instance

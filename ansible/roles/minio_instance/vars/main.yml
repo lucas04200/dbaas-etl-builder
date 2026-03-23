@@ -1,0 +1,9 @@
+---
+network_name: "data_forge_network_01"
+minio_image: "minio/minio:latest"
+minio_container_name: "minio_{{ instance_name }}"
+minio_volume_name: "minio_data_{{ instance_name }}"
+# Credentials are provided via --extra-vars at runtime
+minio_root_user: "{{ minio_root_user }}"
+minio_root_password: "{{ minio_root_password }}"
+console_port: "9001"

@@ -1,0 +1,5 @@
+---
+network_name: "data_forge_network_01"
+qdrant_image: "qdrant/qdrant:latest"
+qdrant_container_name: "qdrant_{{ instance_name }}"
+qdrant_volume_name: "qdrant_data_{{ instance_name }}"

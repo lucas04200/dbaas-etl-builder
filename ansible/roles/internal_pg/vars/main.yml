@@ -1,0 +1,8 @@
+---
+network_name: "data_forge_network_01"
+internal_pg_container: "pg_internal_{{ service_type }}_{{ instance_name }}"
+internal_pg_volume: "pg_internal_{{ service_type }}_data_{{ instance_name }}"
+internal_pg_user: "internal_user"
+internal_pg_password: ""
+internal_pg_dbname: "internal_db"
+internal_pg_host_port: "15000"

@@ -1,0 +1,47 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance MariaDB
+  community.docker.docker_volume:
+    name: "{{ mariadb_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur MariaDB (sans base nommée)
+  community.docker.docker_container:
+    name: "{{ mariadb_container_name }}"
+    image: "{{ mariadb_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ mariadb_volume_name }}:/var/lib/mysql"
+    published_ports:
+      - "{{ host_port }}:3306"
+    env:
+      MYSQL_ROOT_PASSWORD: "{{ root_password }}"
+  when: db_name == ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
+
+- name: Déploiement du conteneur MariaDB (avec base nommée)
+  community.docker.docker_container:
+    name: "{{ mariadb_container_name }}"
+    image: "{{ mariadb_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ mariadb_volume_name }}:/var/lib/mysql"
+    published_ports:
+      - "{{ host_port }}:3306"
+    env:
+      MYSQL_ROOT_PASSWORD: "{{ root_password }}"
+      MYSQL_DATABASE: "{{ db_name }}"
+  when: db_name != ""
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

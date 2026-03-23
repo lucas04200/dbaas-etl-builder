@@ -1,0 +1,6 @@
+---
+network_name: "data_forge_network_01"
+airflow_image: "apache/airflow:2-python3.11"
+airflow_container_name: "airflow_{{ instance_name }}"
+airflow_volume_name: "airflow_data_{{ instance_name }}"
+admin_password: ""

@@ -1,0 +1,30 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance MinIO
+  community.docker.docker_volume:
+    name: "{{ minio_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur MinIO
+  community.docker.docker_container:
+    name: "{{ minio_container_name }}"
+    image: "{{ minio_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ minio_volume_name }}:/data"
+    published_ports:
+      - "{{ host_port }}:9000"
+      - "{{ console_port }}:9001"
+    env:
+      MINIO_ROOT_USER: "{{ minio_root_user }}"
+      MINIO_ROOT_PASSWORD: "{{ minio_root_password }}"
+    command: "server /data --console-address ':9001'"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

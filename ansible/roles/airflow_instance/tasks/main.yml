@@ -1,0 +1,33 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Airflow
+  community.docker.docker_volume:
+    name: "{{ airflow_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur Airflow
+  community.docker.docker_container:
+    name: "{{ airflow_container_name }}"
+    image: "{{ airflow_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ airflow_volume_name }}:/opt/airflow"
+    published_ports:
+      - "{{ host_port }}:8080"
+    env:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://airflow:{{ internal_pg_password }}@pg_internal_airflow_{{ instance_name }}:5432/airflow"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: "admin"
+      _AIRFLOW_WWW_USER_PASSWORD: "{{ admin_password }}"
+    command: "standalone"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

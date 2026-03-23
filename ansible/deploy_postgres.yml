@@ -5,13 +5,13 @@
   
   # Ces variables peuvent être surchargées via --extra-vars lor de l'appel du playbook
   # Exemple: ansible-playbook deploy_postgres.yml -e "instance_name=client_a db_name=erp_db db_user=erp_user db_password=foobar"
+  # All variables MUST be provided via --extra-vars (from the DataForge backend)
   vars:
-    instance_name: "default_instance"
-    db_name: "default_db"
-    db_user: "db_admin"
-    host_port: "5432" # Port d'exposition sur le serveur cible
-    # Il est recommandé de passer le mot de passe depuis un vault ou CLI
-    db_password: "{{ vault_db_password | default('SuperSecret123!') }}"
+    instance_name: "{{ instance_name }}"
+    db_name: "{{ db_name }}"
+    db_user: "{{ db_user }}"
+    db_password: "{{ db_password }}"
+    host_port: "{{ host_port }}"
 
   roles:
     - role: postgres_instance

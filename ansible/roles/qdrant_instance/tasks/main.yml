@@ -1,0 +1,25 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume Docker pour l'instance Qdrant
+  community.docker.docker_volume:
+    name: "{{ qdrant_volume_name }}"
+    state: present
+
+- name: Déploiement du conteneur Qdrant
+  community.docker.docker_container:
+    name: "{{ qdrant_container_name }}"
+    image: "{{ qdrant_image }}"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ qdrant_volume_name }}:/qdrant/storage"
+    published_ports:
+      - "{{ host_port }}:6333"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"

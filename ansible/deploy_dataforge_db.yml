@@ -1,0 +1,7 @@
+---
+- name: Deploy DataForge internal database
+  hosts: docker_hosts
+  gather_facts: false
+
+  roles:
+    - dataforge_db

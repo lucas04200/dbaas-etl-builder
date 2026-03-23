@@ -1,0 +1,38 @@
+---
+- name: S'assurer que le réseau Docker partagé existe
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Création du volume pour la base interne
+  community.docker.docker_volume:
+    name: "{{ internal_pg_volume }}"
+    state: present
+
+- name: Déploiement du conteneur PostgreSQL interne
+  community.docker.docker_container:
+    name: "{{ internal_pg_container }}"
+    image: "postgres:16-alpine"
+    networks:
+      - name: "{{ network_name }}"
+    state: started
+    restart_policy: unless-stopped
+    volumes:
+      - "{{ internal_pg_volume }}:/var/lib/postgresql/data"
+    env:
+      POSTGRES_USER: "{{ internal_pg_user }}"
+      POSTGRES_PASSWORD: "{{ internal_pg_password }}"
+      POSTGRES_DB: "{{ internal_pg_dbname }}"
+    published_ports:
+      - "{{ internal_pg_host_port }}:5432"
+  environment:
+    DOCKER_CONFIG: "/tmp/empty_docker_config_to_bypass_wsl_bug"
+
+- name: Attendre que la base interne soit prête
+  ansible.builtin.command: >
+    docker exec {{ internal_pg_container }} pg_isready -U {{ internal_pg_user }}
+  register: pg_ready
+  until: pg_ready.rc == 0
+  retries: 20
+  delay: 2
+  changed_when: false

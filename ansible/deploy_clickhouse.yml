@@ -1,0 +1,11 @@
+---
+- name: "Déploiement d'une instance ClickHouse"
+  hosts: docker_hosts
+
+  vars:
+    instance_name: "default_clickhouse"
+    host_port: "8140"
+    clickhouse_password: ""
+
+  roles:
+    - role: clickhouse_instance

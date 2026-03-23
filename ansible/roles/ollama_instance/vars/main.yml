@@ -1,0 +1,5 @@
+---
+network_name: "data_forge_network_01"
+ollama_image: "ollama/ollama:latest"
+ollama_container_name: "ollama_{{ instance_name }}"
+ollama_volume_name: "ollama_data_{{ instance_name }}"

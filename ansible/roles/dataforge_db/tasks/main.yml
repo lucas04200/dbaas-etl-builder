@@ -1,0 +1,51 @@
+---
+- name: Create shared Docker network
+  community.docker.docker_network:
+    name: "{{ network_name }}"
+    state: present
+  environment:
+    DOCKER_CONFIG: /tmp/.docker_cfg_dataforge
+
+- name: Create persistent volume for DataForge DB
+  community.docker.docker_volume:
+    name: "{{ volume_name }}"
+    state: present
+  environment:
+    DOCKER_CONFIG: /tmp/.docker_cfg_dataforge
+
+- name: Deploy DataForge internal PostgreSQL container
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    image: "{{ postgres_image }}"
+    state: started
+    restart_policy: unless-stopped
+    networks:
+      - name: "{{ network_name }}"
+    volumes:
+      - "{{ volume_name }}:/var/lib/postgresql/data"
+    ports:
+      - "127.0.0.1:{{ host_port }}:5432"   # Bind to localhost only — not exposed externally
+    env:
+      POSTGRES_DB:       "{{ db_name }}"
+      POSTGRES_USER:     "{{ db_user }}"
+      POSTGRES_PASSWORD: "{{ db_password }}"
+      # Harden: disable trust auth, enforce md5/scram
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ db_user }} -d {{ db_name }}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  environment:
+    DOCKER_CONFIG: /tmp/.docker_cfg_dataforge
+
+- name: Wait for PostgreSQL to be ready
+  community.docker.docker_container_info:
+    name: "{{ container_name }}"
+  register: container_info
+  until: container_info.container.State.Health.Status == "healthy"
+  retries: 12
+  delay: 5
+  environment:
+    DOCKER_CONFIG: /tmp/.docker_cfg_dataforge

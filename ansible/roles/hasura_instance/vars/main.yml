@@ -1,0 +1,6 @@
+---
+network_name: "data_forge_network_01"
+hasura_image: "hasura/graphql-engine:latest"
+hasura_container_name: "hasura_{{ instance_name }}"
+hasura_volume_name: "hasura_data_{{ instance_name }}"
+admin_secret: ""

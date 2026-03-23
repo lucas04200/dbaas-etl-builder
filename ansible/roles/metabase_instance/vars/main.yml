@@ -1,0 +1,9 @@
+---
+network_name: "data_forge_network_01"
+metabase_image: "metabase/metabase:latest"
+metabase_container_name: "metabase_{{ instance_name }}"
+metabase_volume_name: "metabase_data_{{ instance_name }}"
+linked_pg_host: ""
+linked_pg_dbname: ""
+linked_pg_user: ""
+linked_pg_password: ""
