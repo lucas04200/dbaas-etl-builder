@@ -98,7 +98,8 @@ jobs:
           cd web
           # Utilisation de pm2 en priorité pour éviter de bloquer GitHub Actions
           if command -v pm2 &> /dev/null; then
-            pm2 restart dataforge-web || pm2 start main.py --name dataforge-web --interpreter ../venv/bin/python
+            pm2 delete dataforge-web || true
+            pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python"
             pm2 save
           else
             echo "pm2 introuvable, démarrage via nohup..."
