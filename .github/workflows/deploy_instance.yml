@@ -102,16 +102,16 @@ jobs:
           fi
           export DATAFORGE_DB_PASS="${DATAFORGE_DB_PASS:-DataForge_Internal_2024!}"
           
-          cd web
-          # Utilisation de pm2 en priorité pour éviter de bloquer GitHub Actions
-          if command -v pm2 &> /dev/null; then
-            pm2 delete dataforge-web || true
-            pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python" --update-env
-            pm2 save
-          else
-            echo "pm2 introuvable, démarrage via nohup..."
-            # On cherche s'il y a déjà un processus pour le tuer
-            pkill -f "python main.py" || true
-            nohup ../venv/bin/python main.py > ../dataforge_web.log 2>&1 &
-            echo "Application lancée en arrière-plan."
+          # Force installation of PM2 globally to prevent GitHub Actions from killing the background python process
+          if ! command -v pm2 &> /dev/null; then
+             echo "PM2 not found, installing via npm..."
+             sudo npm install -g pm2 || npm install -g pm2
           fi
+          
+          cd web
+          pm2 delete dataforge-web || true
+          pm2 start main.py --name dataforge-web --interpreter "$(pwd)/../venv/bin/python" --update-env
+          pm2 save
+          
+          # Install PM2 startup script automatically if strictly needed (silent fail if no sudo permission)
+          sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $(whoami) --hp $HOME || true
