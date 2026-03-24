@@ -1,0 +1,27 @@
+---
+- name: Forcefully remove Docker containers and volumes
+  hosts: docker_hosts
+  vars:
+    container_name: ""
+    volume_names: []
+
+  tasks:
+    - name: Kill container if it exists
+      command: "docker kill {{ container_name }}"
+      register: kill_result
+      failed_when: false
+      changed_when: "kill_result.rc == 0"
+
+    - name: Force-remove container
+      command: "docker rm --force {{ container_name }}"
+      register: rm_result
+      failed_when: false
+      changed_when: "rm_result.rc == 0"
+
+    - name: Remove specified volumes
+      command: "docker volume rm {{ item }}"
+      loop: "{{ volume_names }}"
+      register: vol_result
+      failed_when: false
+      changed_when: "vol_result.rc == 0"
+      when: volume_names | length > 0

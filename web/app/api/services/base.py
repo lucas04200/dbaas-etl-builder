@@ -113,10 +113,13 @@ def create_service_crud(config: ServiceConfig) -> APIRouter:
 
             main_volumes = [f"{config.volume_prefix}_{name}"] if config.volume_prefix else []
             await docker_remove(f"{config.container_prefix}_{name}", volume_names=main_volumes)
+
             if internal_pg:
-                await docker_remove(f"pg_{internal_pg['name']}",
-                                    volume_names=[f"pg_data_{internal_pg['name']}",
-                                                  f"pg_internal_metabase_{internal_pg['name']}"])
+                # Internal PG container & volume names MUST match those in Ansible (internal_pg role)
+                # pattern: pg_internal_{service_type}_{instance_name}
+                internal_pg_container = f"pg_internal_{config.internal_pg_type}_{name}"
+                internal_pg_volumes = [f"pg_internal_{config.internal_pg_type}_data_{name}"]
+                await docker_remove(internal_pg_container, volume_names=internal_pg_volumes)
 
             for extra in config.extra_containers:
                 await docker_remove(f"{extra}_{name}")
