@@ -1,0 +1,37 @@
+services:
+  dataforge:
+    image: dataforge/dataforge:latest
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://dataforge:${DB_PASSWORD:-changeme}@db:5432/dataforge
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    volumes:
+      # Accès au socket Docker pour provisionner les containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Backups PostgreSQL
+      - dataforge_backups:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dataforge
+      POSTGRES_USER: dataforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - dataforge_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dataforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  dataforge_db:
+  dataforge_backups:
