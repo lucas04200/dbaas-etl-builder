@@ -402,6 +402,18 @@ def init_db() -> str:
     # Apply schema via Alembic (with raw SQL fallback)
     _run_alembic_migrations()
 
+    # Ensure connection tables exist (Alembic might not have them yet)
+    conn = _pool.getconn()
+    try:
+        with cursor(conn) as cur:
+            cur.execute(_SCHEMA_SQL)
+            cur.execute(_MIGRATIONS_SQL)
+        conn.commit()
+    except Exception as exc:
+        logger.error("Failed to ensure connection tables: %s", exc)
+    finally:
+        _pool.putconn(conn)
+
     # JWT secret management
     conn = _pool.getconn()
     try:

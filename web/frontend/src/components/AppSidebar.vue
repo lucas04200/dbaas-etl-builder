@@ -50,6 +50,7 @@
         v-for="svc in enabledServices"
         :key="svc.id"
         :to="svc.route"
+        :ref="setServiceRef(svc.id)"
         class="nav-item"
         :class="{ active: route.path === svc.route }"
       >
@@ -89,17 +90,21 @@
         Se déconnecter
       </a>
     </div>
+
+    <!-- Visual Lineage Overlay (sidebar lines) -->
+    <LineageOverlay :serviceRefs="serviceRefs" :rawConnections="sidebarConnections" v-if="sidebarConnections.length > 0" />
   </nav>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useLibraryStore } from '../stores/library.js'
 import { apiLogout } from '../lib/api.js'
 import { SERVICES } from '../data/services.js'
 import SvcIcon from './SvcIcon.vue'
+import LineageOverlay from './LineageOverlay.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,13 +112,54 @@ const authStore = useAuthStore()
 const libraryStore = useLibraryStore()
 
 const isAdmin = computed(() => authStore.currentUser?.role === 'admin')
+const serviceRefs = reactive({})
+const sidebarConnections = ref([])
+
+// Capture refs for each service link
+const setServiceRef = (id) => (el) => {
+  if (el) serviceRefs[id] = el
+}
 
 // Only services with a management page appear in the sidebar
 const enabledServices = computed(() =>
   SERVICES.filter(s => s.route && libraryStore.isEnabled(s.id))
 )
 
-onMounted(() => libraryStore.loadEnabled())
+async function loadSidebarLineage() {
+  if (!authStore.token) return
+  try {
+    const res = await fetch('/api/architecture', {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const seen = new Set()
+      const lines = []
+      
+      for (const e of data.edges) {
+        const from = e.source.split('-')[0]
+        const to = e.target.split('-')[0]
+        const key = `${from}->${to}`
+        
+        if (serviceRefs[from] && serviceRefs[to] && !seen.has(key)) {
+          seen.add(key)
+          lines.push({ fromId: from, toId: to })
+        }
+      }
+      sidebarConnections.value = lines
+    }
+  } catch (err) {
+    console.warn('Failed to load sidebar lineage', err)
+  }
+}
+
+onMounted(() => {
+  libraryStore.loadEnabled()
+  loadSidebarLineage()
+})
+
+// Reload lineage when navigation happens or services change
+watch(() => route.path, loadSidebarLineage)
 
 async function doLogout() {
   await apiLogout()

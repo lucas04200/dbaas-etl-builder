@@ -83,6 +83,33 @@ def get_architecture(_: dict = Depends(get_current_user), db=Depends(get_db)):
                         }
                     })
                     y_offsets[col] += 1
+                
+                # Add connections from explicit linking tables
+                connection_tables = [
+                    ("metabase", "metabase_connections", "metabase_id", "#509EE3"),
+                    ("n8n", "n8n_connections", "n8n_id", "#FF6D5A"),
+                    ("mage", "mage_connections", "mage_id", "#8A2BE2"),
+                    ("superset", "superset_connections", "superset_id", "#00A699"),
+                    ("airflow", "airflow_connections", "airflow_id", "#017CEE")
+                ]
+                
+                for t_type, conn_table, id_col, color in connection_tables:
+                    try:
+                        cur.execute(f"SELECT {id_col}, pg_id FROM {conn_table}")
+                        conns = cur.fetchall()
+                        for conn in conns:
+                            # Edge from DB to Service (data flow direction)
+                            source_id = f"postgres-{conn['pg_id']}"
+                            target_id = f"{t_type}-{conn[id_col]}"
+                            edges.append({
+                                "id": f"e-conn-{source_id}-{target_id}",
+                                "source": source_id,
+                                "target": target_id,
+                                "animated": True,
+                                "style": {"stroke": color, "strokeWidth": 2, "strokeDasharray": "5,5"}
+                            })
+                    except Exception:
+                        pass
             except Exception as e:
                 pass # table might not exist or columns changed
 

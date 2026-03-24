@@ -73,13 +73,29 @@ def list_metabase_connections(
     db=Depends(get_db),
 ):
     with cursor(db) as cur:
+        # Get internal DB first
         cur.execute(
-            "SELECT p.id, p.name FROM metabase_connections mc "
+            "SELECT p.id, p.name, 'internal' as type FROM metabase_instances m "
+            "JOIN postgres_instances p ON p.id = m.linked_pg_id "
+            "WHERE m.id = %s",
+            (instance_id,),
+        )
+        internal = cur.fetchone()
+        
+        # Get extra connections
+        cur.execute(
+            "SELECT p.id, p.name, 'extra' as type FROM metabase_connections mc "
             "JOIN postgres_instances p ON p.id = mc.pg_id "
             "WHERE mc.metabase_id = %s ORDER BY p.name",
             (instance_id,),
         )
-        return [dict(r) for r in cur.fetchall()]
+        extras = cur.fetchall()
+        
+        results = []
+        if internal:
+            results.append(dict(internal))
+        results.extend([dict(r) for r in extras])
+        return results
 
 
 @router.post("/{instance_id}/connections")
@@ -98,11 +114,12 @@ def add_metabase_connection(
             raise HTTPException(404, "Instance PostgreSQL introuvable")
         try:
             cur.execute(
-                "INSERT INTO metabase_connections (metabase_id, pg_id) VALUES (%s, %s)",
+                "INSERT INTO metabase_connections (metabase_id, pg_id) VALUES (%s, %s) "
+                "ON CONFLICT DO NOTHING",
                 (instance_id, body.pg_id),
             )
-        except Exception:
-            raise HTTPException(409, "Connexion déjà existante")
+        except Exception as e:
+            raise HTTPException(500, f"Erreur lors de la connexion : {str(e)}")
     return {"ok": True}
 
 

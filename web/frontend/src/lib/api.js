@@ -314,6 +314,23 @@ export async function apiDeleteHasura(id) {
   return fetchWithAuth(`/api/hasura/${id}`, { method: 'DELETE' })
 }
 
+// Connections management helper
+export async function apiGetServiceConnections(serviceType, id) {
+  return fetchWithAuth(`/api/${serviceType}/${id}/connections`)
+}
+
+export async function apiAddServiceConnection(serviceType, id, pgId) {
+  return fetchWithAuth(`/api/${serviceType}/${id}/connections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pg_id: pgId }),
+  })
+}
+
+export async function apiDeleteServiceConnection(serviceType, id, pgId) {
+  return fetchWithAuth(`/api/${serviceType}/${id}/connections/${pgId}`, { method: 'DELETE' })
+}
+
 // Instances (all services)
 export async function apiGetInstances() {
   return fetchWithAuth('/api/instances')
