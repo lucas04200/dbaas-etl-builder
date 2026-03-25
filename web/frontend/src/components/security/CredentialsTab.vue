@@ -38,7 +38,7 @@
 
     <div v-if="revealed" class="cred-result">
       <div v-for="(value, key) in revealed" :key="key" class="cred-row">
-        <span class="cred-label">{{ key }}</span>
+        <span class="cred-label">{{ labelFor(key) }}</span>
         <div class="cred-value-wrap">
           <code class="cred-value">{{ value }}</code>
           <button class="cred-copy" @click="copy(value)">
@@ -62,6 +62,7 @@ import {
   apiGetClickHouse, apiGetSuperset, apiGetAirflow, apiGetHasura,
   apiGetMage, apiRevealCredentials,
 } from '../../lib/api.js'
+import { copyToClipboard } from '../../lib/utils.js'
 import { useToastStore } from '../../stores/toast.js'
 
 const toastStore = useToastStore()
@@ -85,6 +86,25 @@ const selectedInstance = ref(null)
 const loadingCreds = ref(false)
 const revealed = ref(null)
 const revealError = ref('')
+
+const LABELS = {
+  db_password: 'Mot de passe',
+  db_user: 'Utilisateur',
+  db_name: 'Base de données',
+  password: 'Mot de passe',
+  root_user: 'Utilisateur root',
+  root_password: 'Mot de passe root',
+  admin_password: 'Mot de passe admin',
+  admin_user: 'Utilisateur admin',
+  admin_secret: 'Secret administrateur',
+  access_token: 'Jeton d\'accès',
+  host_port: 'Port',
+  name: 'Nom de l\'instance',
+}
+
+function labelFor(key) {
+  return LABELS[key] || key
+}
 
 watch(selectedType, async (type) => {
   instances.value = []
@@ -129,7 +149,7 @@ async function revealCreds() {
 
 async function copy(text) {
   try {
-    await navigator.clipboard.writeText(String(text))
+    await copyToClipboard(text)
     toastStore.showToast('Copié')
   } catch {
     toastStore.showToast('Impossible de copier', true)

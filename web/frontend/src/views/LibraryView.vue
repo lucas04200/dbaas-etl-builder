@@ -82,19 +82,19 @@ async function handleAction(service) {
   if (isEnabled) {
     // Retirer
     await libraryStore.setEnabled(service.id, false)
-    toastStore.show(`${service.name} retiré de vos services`, 'info')
+    toastStore.showToast(`${service.name} retiré de vos services`)
   } else if (status === 'pulled') {
     // Image déjà téléchargée → juste activer
     await libraryStore.setEnabled(service.id, true)
-    toastStore.show(`${service.name} ajouté à vos services`, 'success')
+    toastStore.showToast(`${service.name} ajouté à vos services`)
   } else {
     // Télécharger + activer
     try {
       await libraryStore.pullImage(service.id)
-      toastStore.show(`Téléchargement de ${service.name} lancé…`, 'info')
+      toastStore.showToast(`Téléchargement de ${service.name} lancé…`)
       await libraryStore.setEnabled(service.id, true)
     } catch {
-      toastStore.show(`Erreur lors du téléchargement de ${service.name}`, 'error')
+      toastStore.showToast(`Erreur lors du téléchargement de ${service.name}`, true)
     }
   }
 }

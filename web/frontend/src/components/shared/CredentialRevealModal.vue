@@ -29,6 +29,12 @@
       <span class="cred-label">Port</span>
       <div class="cred-value-wrap">
         <code class="cred-value">{{ port }}</code>
+        <button class="cred-copy" @click="copy(port)" :title="'Copier'">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M3 11V3a1.5 1.5 0 011.5-1.5H11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="form-actions" style="margin-top:20px">
@@ -40,6 +46,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
+import { copyToClipboard } from '../../lib/utils.js'
 import { useToastStore } from '../../stores/toast.js'
 
 const props = defineProps({
@@ -72,7 +79,7 @@ function labelFor(key) {
 
 async function copy(text) {
   try {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     toastStore.showToast('Copié dans le presse-papiers')
   } catch {
     toastStore.showToast('Impossible de copier', true)
