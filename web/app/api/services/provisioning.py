@@ -22,7 +22,10 @@ async def run_ansible(playbook: str, extra_vars: dict) -> tuple[int, str]:
         cwd=str(BASE_DIR / "ansible"),
     )
     stdout, stderr = await proc.communicate()
-    return proc.returncode, (stdout + stderr).decode()
+    output = (stdout + stderr).decode()
+    if proc.returncode != 0:
+        logger.error("Ansible playbook %s failed (rc: %d): %s", playbook, proc.returncode, output)
+    return proc.returncode, output
 
 
 async def docker_remove(container_name: str, volume_names: list[str] | None = None):

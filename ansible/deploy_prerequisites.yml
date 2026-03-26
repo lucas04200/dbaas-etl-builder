@@ -16,10 +16,17 @@
           - python3
           - python3-pip
           - python3-venv
+          - python3-docker   # Needed for community.docker (SDK for Python)
           - docker.io
           - docker-compose
           - acl
         state: present
+
+    - name: Ajouter l'utilisateur runner au groupe docker
+      user:
+        name: "{{ ansible_user | default(ansible_user_id) }}"
+        groups: docker
+        append: yes
 
     - name: Ajouter le repository NodeSource (pour Node.js 20)
       shell: "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
