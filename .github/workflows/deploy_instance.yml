@@ -85,6 +85,8 @@ jobs:
         run: |
           cd web/frontend
           npm install -q
+          # Fix permission issues for npm binaries
+          chmod -R +x node_modules/.bin/ || true
           npm run build
 
       - name: "[Deploy] 5. Installer les dépendances Python"
