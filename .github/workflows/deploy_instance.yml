@@ -56,6 +56,12 @@ jobs:
             echo "Nouvelle DATAFORGE_MASTER_KEY générée dans .env"
           fi
 
+          if ! grep -q "DATAFORGE_DB_PASS" .env; then
+            # Par défaut on utilise le mot de passe interne, mais il est recommandé de le changer via secret GitHub
+            echo "DATAFORGE_DB_PASS='${{ secrets.DATAFORGE_DB_PASS || 'DataForge_Internal_2024!' }}'" >> .env
+            echo "DATAFORGE_DB_PASS configurée dans .env"
+          fi
+
       - name: "[Provisioning] 2. Déployer la base de données interne (Ansible)"
         run: |
           cd ansible

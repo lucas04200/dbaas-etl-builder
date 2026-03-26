@@ -8,10 +8,13 @@ No hardcoded default passwords — if a required var is missing, the app refuses
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent  # project root
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / "web" / ".env")  # Fallback for some setups
 WEB_DIR = BASE_DIR / "web"
 STATIC_PATH = WEB_DIR / "static"
 
