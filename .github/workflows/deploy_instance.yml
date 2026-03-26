@@ -84,9 +84,12 @@ jobs:
       - name: "[Build] 4. Build du frontend Vue"
         run: |
           cd web/frontend
-          npm install -q
-          # Fix permission issues for npm binaries
-          chmod -R +x node_modules/.bin/ || true
+          # S'assurer que les fichiers appartiennent à l'utilisateur courant (souvent nécessaire sur runner persistant)
+          sudo chown -R $USER:$USER .
+          # Utiliser 'npm ci' au lieu de 'npm install' pour une installation plus propre et fiable en CI
+          npm ci -q
+          # S'assurer que les binaires sont exécutables
+          chmod -R +x node_modules/.bin/
           npm run build
 
       - name: "[Deploy] 5. Installer les dépendances Python"
